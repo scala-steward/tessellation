@@ -23,6 +23,12 @@ lazy val fs2Dependencies = Seq(
   "co.fs2" %% "fs2-reactive-streams"
 ).map(_ % "2.4.4")
 
+lazy val doobieDependencies = Seq(
+  "org.xerial" % "sqlite-jdbc" % "3.32.3.2",
+  "org.tpolecat" %% "doobie-core" % "0.9.0",
+  "org.tpolecat" %% "doobie-quill" % "0.9.0"
+)
+
 lazy val dependencies = Seq(
   "org.typelevel" %% "spire" % "0.17.0-M1",
   "org.typelevel" %% "cats-laws" % "2.0.0",
@@ -33,7 +39,7 @@ lazy val dependencies = Seq(
   "org.tpolecat" %% "natchez-jaeger" % "0.0.12",
   ("org.typelevel" %% "cats-effect" % "2.2.0").withSources().withJavadoc(),
   "com.beachape" %% "enumeratum" % "1.6.1"
-) ++ drosteDependencies ++ kryoDependencies ++ fs2Dependencies
+) ++ drosteDependencies ++ kryoDependencies ++ fs2Dependencies ++ doobieDependencies
 
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
@@ -42,6 +48,8 @@ lazy val testDependencies = Seq(
   "org.scalamock" %% "scalamock" % "4.4.0",
   "org.mockito" %% "mockito-scala" % "1.5.16",
   "org.mockito" %% "mockito-scala-cats" % "1.5.16",
+  "org.tpolecat" %% "doobie-specs2"    % "0.9.0",
+  "org.tpolecat" %% "doobie-scalatest" % "0.9.0"
 ).map(_ % "test")
 
 libraryDependencies ++= dependencies ++ testDependencies

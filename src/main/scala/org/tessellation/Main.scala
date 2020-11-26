@@ -130,3 +130,49 @@ object SerializationExample extends App {
   case class UnknownLorem(a: Int)
   roundtrip(UnknownLorem(4))
 }
+
+object TryDoobie extends App {
+
+  import doobie._
+  import doobie.implicits._
+  import cats._
+  import cats.data._
+  import cats.effect.IO
+  import cats.syntax.all._
+
+  implicit val cs = IO.contextShift(doobie.ExecutionContexts.synchronous)
+
+  val xa = Transactor.fromDriverManager[IO](
+    "org.sqlite.JDBC", "jdbc:sqlite:sample.db", "", ""
+  )
+
+  val y = xa.yolo
+  import y._
+
+  val drop =
+    sql"""
+    DROP TABLE IF EXISTS person
+  """.update.run
+
+  val create =
+    sql"""
+    CREATE TABLE person (
+      name TEXT NOT NULL UNIQUE,
+      age  INTEGER
+    )
+  """.update.run
+
+  val res = (drop, create).mapN(_ + _).transact(xa).unsafeRunSync
+  println(res)
+
+  def insert1(name: String, age: Option[Short]): Update0 =
+    sql"insert into person (name, age) values ($name, $age)".update
+
+  insert1("Alice", Some(12)).run.transact(xa).unsafeRunSync
+  insert1("Bob", None).quick.unsafeRunSync // switch to YOLO mode
+
+  case class Person(id: Long, name: String, age: Option[Short])
+
+  val l = sql"select rowid, name, age from person".query[Person].to[List].transact(xa).unsafeRunSync
+  l.foreach(println)
+}
