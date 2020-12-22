@@ -3,7 +3,7 @@ package org.tessellation.schema
 import cats.arrow.{Arrow, ArrowChoice, CommutativeArrow}
 import cats.syntax.all._
 import cats.kernel.{Monoid, PartialOrder}
-import cats.{Applicative, Eq, Traverse, ~>}
+import cats.{Applicative, CoflatMap, Eq, Traverse, ~>}
 import higherkindness.droste.data.{:<, Coattr}
 import higherkindness.droste.syntax.compose._
 import higherkindness.droste.util.DefaultTraverse
@@ -25,9 +25,9 @@ trait Ω extends Poset
 /**
  * Homomorphism object for determining morphism isomorphism
  */
-trait Hom[+A, +B] extends Ω {
+trait Hom[+A, +B] extends Ω {}
 
-}
+
 
 object Hom {
 
@@ -40,6 +40,7 @@ object Hom {
   def apply[A, B](a: A, b: B) = Cell2[A, B](a, b)
   //todo use fusion to map in between run: Ω => (Hom[A, B], Ω)
   def apply[A, B](run: A => (Cocell[A, B], B)) = Cocell[A, B](run)
+
   implicit val arrowInstance: ArrowChoice[Hom] = new ArrowChoice[Hom] with CommutativeArrow[Hom] {
     override def choose[A, B, C, D](f: Hom[A, C])(g: Hom[B, D]): Hom[Either[A, B], Either[C, D]] = ???
 
@@ -50,11 +51,20 @@ object Hom {
     override def first[A, B, C](fa: Hom[A, B]): Hom[(A, C), (B, C)] = ???
   }
 
-  val coalgebra: Coalgebra[Hom[Ω, ?], Ω] = Coalgebra[Hom[Ω, ?], Ω] { thing: Ω => Cell(thing) }
+  val coalgebra: Coalgebra[Hom[Ω, ?], Ω] = Coalgebra[Hom[Ω, ?], Ω] { thing: Ω => {
+    println(thing)
+    Cell(thing)
+  } }
 
   val rcoalgebra: RCoalgebra[Ω, Hom[Ω, ?], Ω] = RCoalgebra {
-    case ohm: Ω => Cell(ohm)
-    case cell: Cell[Ω, Ω] => Cell2(cell.a, Left(cell.run(cell.a)))
+    case cell: Cell[Ω, Ω] => {
+      println(cell.a)
+      Cell2(cell.a, Left(cell.run(cell.a)))
+    }
+    case ohm: Ω => {
+      println(ohm)
+      Cell(ohm)
+    }
   }
 
   val cvAlgebra: CVAlgebra[Hom[Ω, ?], Ω] = CVAlgebra {
@@ -164,7 +174,20 @@ object DummyCellMethods {
 }
 
 //todo Cv algebras here
-case class Cell[A, B](override val a: A) extends Topos[A, B] {
+case class Cell[A, B](override val a: A) extends Topos[A, B] {}
+
+object Cell {
+  implicit val arrowInstance: Arrow[Cell] = new Arrow[Cell] {
+    override def lift[A, B](f: A => B): Cell[A, B] = ???
+
+    override def first[A, B, C](fa: Cell[A, B]): Cell[(A, C), (B, C)] = ???
+
+    override def compose[A, B, C](f: Cell[B, C], g: Cell[A, B]): Cell[A, C] = {
+      // A ---> B ---> C
+      f.run(g.run(g)).asInstanceOf[Cell[A, C]]
+//      Cell(g.transform).transform
+    }
+  }
 }
 
 //todo postpro/prePro here

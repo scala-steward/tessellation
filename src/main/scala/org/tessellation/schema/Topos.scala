@@ -11,7 +11,6 @@ import higherkindness.droste.data.{Mu, Nu}
  * Topos context for morphisms of morphisms
  */
 trait Topos[A, B] extends Hom[A, B] {
-
   import Hom._
 
   val arrow = Hom.arrowInstance
@@ -21,7 +20,7 @@ trait Topos[A, B] extends Hom[A, B] {
 
   def pow: Ω => Ω = _ => this // finite limits should exist https://ncatlab.org/nlab/show/exponentiable+topos
   // todo mock for lookups of natTrans: F ~> F for _pro morphisms
-  def natTrans: ~>[Topos[A, ?], Topos[A, ?]] = λ[Topos[A, ?] ~> Topos[A, ?]](fa => fa)
+  def natTrans: ~>[Topos[A, *], Topos[A, *]] = λ[Topos[A, *] ~> Topos[A, *]](fa => fa)
 
   val gather = cvAlgebra.gather(Gather.histo)
   val scatter = rcoalgebra.scatter(Scatter.gapo(coalgebra))
@@ -78,7 +77,7 @@ object Topos {
       }
 
   //todo this should be on hom
-  implicit val repr = new Representable[Topos[Ω, ?]] {
+  implicit val repr = new Representable[Topos[Ω, *]] {
     override def F: Functor[Topos[Ω, *]] = ???
 
     override type Representation = this.type
@@ -99,5 +98,5 @@ object Topos {
   }
 
   //left exact right derived
-  val representation: Representable[Topos[Ω, ?]] = Representable(repr)
+  val representation: Representable[Topos[Ω, *]] = Representable(repr)
 }
