@@ -1,7 +1,7 @@
 package org.tessellation
 
 import cats.effect.{ExitCase, ExitCode, IOApp, Sync}
-import org.tessellation.schema.{AciF, Cell, Cell2, Cocell, Context, Hom, L1Consensus, Topos, Ω}
+import org.tessellation.schema.{Cell, Cell2, Cocell, Context, Hom, L1Consensus, Topos, Ω}
 import org.tessellation.schema.Hom._
 import fs2.{Pipe, Stream}
 import cats.syntax.all._
@@ -31,48 +31,14 @@ object LiftExample extends App {
 
 object RunExample extends App {
 
-  println(L1Consensus.consensus(Set("aa", "bb", "cc", "dd")).foldMap(L1Consensus.compiler))
-//
-//  case class IntToStringCell(a: Int) extends Topos[Int, String] {
-//
-//    def execute: () => String = {
-//      val cvAlgebra: CVAlgebra[Hom[Ω, *], Ω] = CVAlgebra {
-//        case cell@Cell(aa) => {
-//          println(aa)
-//          // cell.run(Context())
-//          cell
-//        }
-//      }
-//      val rcoalgebra: RCoalgebra[Ω, Hom[Ω, *], Ω] = RCoalgebra {
-//        case cell: Cell[Ω, Ω] => {
-//          println(cell.a)
-//          Cell2(cell.a, Left(cell.run(cell.a)))
-//        }
-//        case ohm: Ω => Cell[Ω, Either[Ω, Ω]](ohm)
-//      }
-//      val coalgebra: Coalgebra[Hom[Ω, *], Ω] = Coalgebra[Hom[Ω, *], Ω] { thing: Ω => {
-//        println("thing")
-//        Cell(thing)
-//      } }
-//
-//      val gather = cvAlgebra.gather(Gather.histo)
-//      val scatter = rcoalgebra.scatter(Scatter.gapo(coalgebra))
-//
-//      val run: Ω => Ω = scheme.ghylo(gather, scatter)
-//
-//      println(run(this))
-//
-//      () => a.toString
-//    }
-//  }
-//
-//  val cell1 = IntToStringCell(1)
-//
-//  println(cell1.execute)
-//
-////  def cellPipe[F[_]](cell: IntToStringCell): Pipe[F, Int, String] = IntToStringCell
-//
-////  Stream(1, 2, 3).through(cellPipe(cell1))
+  val consensus = L1Consensus.consensus(Set("aa", "bb", "cc", "dd"))
+
+  val programSync = consensus.foldMap(L1Consensus.compiler)
+  val programIO = consensus.foldMap(L1Consensus.ioCompiler)
+
+  println(programSync)
+  println(programIO.unsafeRunSync)
+
 }
 
 object StreamExample extends App {

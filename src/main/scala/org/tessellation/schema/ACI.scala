@@ -3,37 +3,10 @@ package org.tessellation.schema
 import cats.free.Free
 import cats.free.Free.liftF
 import cats.~>
-import higherkindness.droste.{Algebra, Coalgebra}
+import cats.syntax.all._
 import cats.Id
-import org.tessellation.schema.L1Consensus.Peer
-
-trait AciF[A]
-
-case class Return[A](x: Int) extends AciF[A]
-case class Execute[A](command: Command[A, Int, Int]) extends AciF[A]
-
-trait Command[A, I, O] {
-  def run(): O
-}
-
-case class ApiCall[A](request: Request[Int]) extends Command[A, Int, Int] {
-  def run() = request.input // todo: make ApiCall a trait
-}
-case class Request[I](input: I)
-case class Response[O](output: O)
-
-object AciF {
-
-  val algebra: Algebra[AciF, Int] = Algebra {
-    case Return(x) => x
-    case Execute(cmd@ApiCall(_)) => cmd.run()
-  }
-
-  val coalgebra: Coalgebra[AciF, Int] = Coalgebra {
-    n => if (n <= 0) Return(n) else Execute(ApiCall(Request(n)))
-  }
-
-}
+import cats.effect.IO
+import org.tessellation.schema.L1Consensus.{Peer, Response}
 
 
 sealed trait L1ConsensusA[A]
@@ -44,6 +17,7 @@ case class ValidateResponses[T](responses: List[Response[T]]) extends L1Consensu
 object L1Consensus {
   type Peer = String
   type Facilitators = Set[Peer]
+  case class Response[O](output: O)
 
 
   type L1Consensus[A] = Free[L1ConsensusA, A]
@@ -70,10 +44,34 @@ object L1Consensus {
         peers.take(2).asInstanceOf[A]
       }
       case CollectResponses(facilitators) => {
-        facilitators.toList.map(peer => 2).asInstanceOf[A] // mocked api call
+        facilitators.toList.map(peer => {
+          val proposal = 2
+          println(s"Peer=${peer} proposal is ${proposal}")
+          proposal
+        }).asInstanceOf[A] // mocked api call
       }
       case ValidateResponses(responses) => {
         (if (responses.toSet.size == 1) Some(responses.head) else None).asInstanceOf[A]
+      }
+    }
+  }
+
+  def ioCompiler: L1ConsensusA ~> IO = new (L1ConsensusA ~> IO) {
+    def apiCall: Peer => IO[Int] = peer => {
+      val proposal = 2
+      println(s"Peer=${peer} proposal is ${proposal}")
+      proposal.pure[IO]
+    }
+
+    override def apply[A](fa: L1ConsensusA[A]): IO[A] = fa match {
+      case SelectFacilitators(peers) => {
+        peers.take(2).asInstanceOf[A].pure[IO]
+      }
+      case CollectResponses(facilitators) => {
+        facilitators.toList.traverse(apiCall).map(_.asInstanceOf[A]) // mocked api call
+      }
+      case ValidateResponses(responses) => {
+        (if (responses.toSet.size == 1) Some(responses.head) else None).asInstanceOf[A].pure[IO]
       }
     }
   }
