@@ -1,7 +1,8 @@
 package org.tessellation
 
+import cats.Functor
 import cats.effect.{ExitCase, ExitCode, IOApp, Sync}
-import org.tessellation.schema.{Cell, Cell2, Cocell, Context, Hom, L1Consensus, Topos, Ω}
+import org.tessellation.schema.{AciF, Cell, Cell2, Cocell, Context, Hom, L1Consensus, Topos, Ω}
 import org.tessellation.schema.Hom._
 import fs2.{Pipe, Stream}
 import cats.syntax.all._
@@ -33,12 +34,18 @@ object RunExample extends App {
 
   val consensus = L1Consensus.consensus(Set("aa", "bb", "cc", "dd"))
 
-  val programSync = consensus.foldMap(L1Consensus.compiler)
+//  val programSync = consensus.foldMap(L1Consensus.compiler)
   val programIO = consensus.foldMap(L1Consensus.ioCompiler)
 
-  println(programSync)
-  println(programIO.unsafeRunSync)
+  case class MyCell[A, B](algebra: Algebra[AciF, B], coalgebra: Coalgebra[AciF, A], a: A) extends Topos[A, B] {
+    def pipe(implicit f: A => B): Pipe[cats.Id, A, B] = in => in.map(i => algebra(coalgebra(i).map(f)))
+  }
 
+  val cell = MyCell(AciF.l1ConsensusAlgebra, AciF.l1ConsensusCoalgebra, 0)
+
+  val pipeline = Stream(1, 2, 3).through(cell.pipe(_.some))
+
+  println(pipeline.compile.toList)
 }
 
 object StreamExample extends App {

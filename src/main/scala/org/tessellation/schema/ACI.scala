@@ -2,11 +2,11 @@ package org.tessellation.schema
 
 import cats.free.Free
 import cats.free.Free.liftF
-import cats.~>
+import cats.{Functor, Id, ~>}
 import cats.syntax.all._
-import cats.Id
 import cats.effect.IO
-import org.tessellation.schema.L1Consensus.{Peer, Response}
+import higherkindness.droste.{Algebra, Coalgebra}
+import org.tessellation.schema.L1Consensus.{L1Consensus, Peer, Response, compiler}
 
 
 sealed trait L1ConsensusA[A]
@@ -74,5 +74,27 @@ object L1Consensus {
         (if (responses.toSet.size == 1) Some(responses.head) else None).asInstanceOf[A].pure[IO]
       }
     }
+  }
+}
+
+sealed trait AciF[A]
+case class Consensus[A, B](consensus: L1Consensus[B]) extends AciF[A]
+case class Return[A](output: Int) extends AciF[A]
+
+object AciF {
+  implicit val functor: Functor[AciF] = new Functor[AciF] {
+    override def map[A, B](fa: AciF[A])(f: A => B): AciF[B] = fa match {
+      case Return(output) => Return(output)
+      case Consensus(c) => Consensus(c)
+    }
+  }
+
+  val l1ConsensusAlgebra: Algebra[AciF, Option[Int]] = Algebra {
+    case Consensus(consensus) => consensus.foldMap(compiler).asInstanceOf[Option[Int]]
+    case Return(output) => Some(output)
+  }
+
+  val l1ConsensusCoalgebra: Coalgebra[AciF, Int] = Coalgebra {
+    n => if (n <= 0) Return(n) else Consensus(L1Consensus.consensus(Set("aa", "bb", "cc")))
   }
 }
