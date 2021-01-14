@@ -14,7 +14,7 @@ trait Topos[A, B] extends Hom[A, B] {
   import Hom._
 
   val arrow = Hom.arrowInstance
-  val a: A
+   val a: A
   val terminator: Ω = this // subobject classifier
   val identity = natTrans
 
@@ -24,9 +24,7 @@ trait Topos[A, B] extends Hom[A, B] {
 
   val gather = cvAlgebra.gather(Gather.histo)
   val scatter = rcoalgebra.scatter(Scatter.gapo(coalgebra))
-  val run: Ω => Ω = scheme.ghylo(
-    gather,
-    scatter)
+  val run: Ω => Ω = scheme.ghylo(gather, scatter)
 }
 
 object Topos {

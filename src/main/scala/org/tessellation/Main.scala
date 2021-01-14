@@ -1,8 +1,8 @@
 package org.tessellation
 
 import cats.Functor
-import cats.effect.{ExitCase, ExitCode, IOApp, Sync}
-import org.tessellation.schema.{AciF, Cell, Cell2, Cocell, Context, Hom, L1Consensus, Topos, Ω}
+import cats.effect.{ExitCase, ExitCode, IO, IOApp, Sync}
+import org.tessellation.schema.{AciF, Cell, Cell2, CellM, Cocell, Context, Hom, L0Consensus, L1Consensus, Topos, Ω}
 import org.tessellation.schema.Hom._
 import fs2.{Pipe, Stream}
 import cats.syntax.all._
@@ -30,22 +30,51 @@ object LiftExample extends App {
   val myClone = constellation >>> intToposClone
 }
 
+//object RunExample extends App {
+//
+//  val consensus = L1Consensus.consensus(Set("aa", "bb", "cc", "dd"))
+//
+////  val programSync = consensus.foldMap(L1Consensus.compiler)
+//  val programIO = consensus.foldMap(L1Consensus.ioCompiler)
+//
+//  case class MyCell[A, B](algebra: Algebra[AciF, B], coalgebra: Coalgebra[AciF, A], a: A) extends Topos[A, B] {
+//    def pipe(implicit f: A => B): Pipe[cats.Id, A, B] = in => in.map(i => algebra(coalgebra(i).map(f)))
+//  }
+//
+//  val cell = MyCell(AciF.l1ConsensusAlgebra, AciF.l1ConsensusCoalgebra, 0)
+//
+//  val pipeline = Stream(1, 2, 3).through(cell.pipe(_.some))
+//
+//  println(pipeline.compile.toList)
+//}
+
 object RunExample extends App {
+  val L1 = CellM[IO, Int, Option[Int], AciF](L1Consensus.coalgebra, L1Consensus.algebra)
+  val L0 = CellM[IO, Int, String, AciF](L0Consensus.coalgebra, L0Consensus.algebra)
 
-  val consensus = L1Consensus.consensus(Set("aa", "bb", "cc", "dd"))
+//  println(s"L1 consensus: INPUT=2 | OUTPUT=${L1.run(2)}")
+//  println(s"L0 consensus: INPUT=2 | OUTPUT=${L0.run(2)}")
 
-//  val programSync = consensus.foldMap(L1Consensus.compiler)
-  val programIO = consensus.foldMap(L1Consensus.ioCompiler)
+  // OPTION 1
+  val pipeline1 = Stream[IO, Int](1, 2, 3)
+    .through(L1.pipe)
+    .filter(_.isDefined)
+    .map(_.get)
+    .through(L0.pipe)
+    .compile
+    .toList
 
-  case class MyCell[A, B](algebra: Algebra[AciF, B], coalgebra: Coalgebra[AciF, A], a: A) extends Topos[A, B] {
-    def pipe(implicit f: A => B): Pipe[cats.Id, A, B] = in => in.map(i => algebra(coalgebra(i).map(f)))
-  }
+  println(pipeline1.unsafeRunSync)
 
-  val cell = MyCell(AciF.l1ConsensusAlgebra, AciF.l1ConsensusCoalgebra, 0)
+  // OPTION 2
+  val L01 = CellM.compose[IO, Int, Option[Int], Int, String, AciF](L1, L0, _.getOrElse(5))
 
-  val pipeline = Stream(1, 2, 3).through(cell.pipe(_.some))
+  val pipeline2 = Stream[IO, Int](1, 2, 3)
+    .through(L01.pipe)
+    .compile
+    .toList
 
-  println(pipeline.compile.toList)
+  println(pipeline2.unsafeRunSync)
 }
 
 object StreamExample extends App {

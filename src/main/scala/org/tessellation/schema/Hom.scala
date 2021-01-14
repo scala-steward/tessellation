@@ -1,9 +1,11 @@
 package org.tessellation.schema
 
 import cats.arrow.{Arrow, ArrowChoice, CommutativeArrow}
+import cats.free.Free
 import cats.syntax.all._
 import cats.kernel.{Monoid, PartialOrder}
-import cats.{Applicative, CoflatMap, Eq, Traverse, ~>}
+import cats.{Applicative, CoflatMap, Eq, Functor, Traverse, ~>}
+import fs2.Pipe
 import higherkindness.droste.data.{:<, Coattr}
 import higherkindness.droste.syntax.compose._
 import higherkindness.droste.util.DefaultTraverse
@@ -172,6 +174,31 @@ object Hom {
 object DummyCellMethods {
   def dummyAlgebra[A, B](a: A): B = ???
 }
+
+// 1. Cell takes algebra and coalgebra
+// 2. Run method takes INPUT and produces OUTPUT (IMO it should be a stream/pipe)
+// 3. Nested cell is a composition of two cells
+
+case class CellM[M[_], In, Out, S[_]: Functor](run: In => Out) {
+  val pipe: Pipe[M, In, Out] = in => in.map(run)
+}
+
+object CellM {
+  def apply[M[_], In, Out, S[_]: Functor](run: In => Out) = new CellM[M, In, Out, S](run)
+  def apply[M[_], In, Out, S[_]: Functor](coalgebra: Coalgebra[S, In], algebra: Algebra[S, Out]) =
+    new CellM[M, In, Out, S](
+      scheme.ghylo(algebra.gather(Gather.cata), coalgebra.scatter(Scatter.ana))
+    )
+
+  def compose[M[_], A, B, C, S[_]: Functor](f: CellM[M, A, B, S], g: CellM[M, B, C, S]): CellM[M, A, C, S] = {
+    CellM[M, A, C, S](f.run andThen g.run)
+  }
+
+  def compose[M[_], A, B, C, D, S[_]: Functor](f: CellM[M, A, B, S], g: CellM[M, C, D, S], bc: B => C): CellM[M, A, D, S] = {
+    CellM[M, A, D, S](f.run andThen bc andThen g.run)
+  }
+}
+
 
 //todo Cv algebras here
 case class Cell[A, B](override val a: A) extends Topos[A, B] {}
