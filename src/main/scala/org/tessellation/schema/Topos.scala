@@ -6,6 +6,7 @@ import cats.syntax.all._
 import cats.{Functor, Representable, ~>}
 import higherkindness.droste._
 import higherkindness.droste.data.{Mu, Nu}
+import org.tessellation.schema.Hom.{coalgebra, cvAlgebra, rcoalgebra}
 
 /**
  * Topos context for morphisms of morphisms

@@ -10,6 +10,7 @@ import higherkindness.droste.data.{:<, Coattr}
 import higherkindness.droste.syntax.compose._
 import higherkindness.droste.util.DefaultTraverse
 import higherkindness.droste.{Algebra, _}
+import org.tessellation.RunExample.{L1, MEdge}
 import org.tessellation.schema.Hom.Endo
 
 /**
@@ -114,6 +115,7 @@ object Hom {
           case Cell(value) => (Cell(value): Hom[A, C]).pure[F]
           case Cell0(value) => (Cell0(value): Hom[A, C]).pure[F]
           case Context() => (Context(): Hom[A, C]).pure[F]
+          case L1(a) => (L1(a): Hom[A, C]).pure[F]
         }
     }
 

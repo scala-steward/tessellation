@@ -3,16 +3,18 @@ package org.tessellation
 import cats.Functor
 import cats.effect.{ExitCase, ExitCode, IO, IOApp, Sync}
 import org.tessellation.schema.{AciF, Cell, Cell0, Cell2, Cocell, Context, Hom, L0Consensus, L1Consensus, Topos, Ω}
-import org.tessellation.schema.Hom._
+import org.tessellation.schema.Hom.{coalgebra, _}
 import fs2.{Pipe, Stream}
 import cats.syntax.all._
-import higherkindness.droste.{Algebra, CVAlgebra, Coalgebra, CoalgebraM, GAlgebra, GAlgebraM, GCoalgebra, Gather, RAlgebra, RCoalgebra, RCoalgebraM, Scatter, scheme}
+import higherkindness.droste.{Algebra, AlgebraM, CVAlgebra, Coalgebra, CoalgebraM, GAlgebra, GAlgebraM, GCoalgebra, Gather, RAlgebra, RCoalgebra, RCoalgebraM, Scatter, scheme}
 import higherkindness.droste.data.{:<, Attr, Fix}
 import org.tessellation.ConsensusExample.{intGather, intScatter}
 import org.tessellation.StreamExample.pipeline
 import org.tessellation.hypergraph.EdgePartitioner
 import org.tessellation.hypergraph.EdgePartitioner.EdgePartitioner
 import org.tessellation.serialization.{Kryo, KryoRegistrar, SerDe}
+
+import scala.util.Random
 
 object Main extends App {
   println("Welcome to " |+| "Tessellation!")
@@ -81,40 +83,62 @@ object RunExample extends App {
 
 object RunExample extends App {
 
-  class L1Cell(txs: List[Int]) extends Cell[List[Int], Int](txs) {
-    val coalgebraGAPO: Coalgebra[Hom[Ω, *], Ω] = Coalgebra[Hom[Ω, *], Ω] { thing: Ω => {
-      println(thing)
-      Cell(thing)
-    } }
+  case class MEdge(val a: List[Int]) extends Ω
+  case class MBlock(a: Int) extends Ω // (a: Int) is a SUM of all transactions
 
-    val coalgebra: RCoalgebra[Ω, Hom[Ω, ?], Ω] = RCoalgebra {
-      case cell: Cell[List[Int], Int] => {
-        Cell0(IO { cell.a.sum })
-      }
-    }
-
-    val algebra: CVAlgebra[Hom[Ω, ?], Ω] = CVAlgebra {
-      case Cell0(a: IO[_]) => {
-        Cell0(a.unsafeRunSync)
-      }
-    }
-
-    val g = algebra.gather(Gather.histo)
-    val s = coalgebra.scatter(Scatter.gapo(coalgebraGAPO))
-
-    override val run: Ω => Ω = scheme.ghylo(g, s)
+  case class L1[A, B](val a: A) extends Topos[A, B] {
 
   }
 
-  object L1Cell {
-    def apply(txs: List[Int]): L1Cell = new L1Cell(txs)
+  class APIService {
+    // I received a broadcast from node2 with its proposals => how to pass it to the proper cell?
+  }
+
+  object L1 {
+    def apiCall: () => IO[Int] = _ => IO {
+      Random.nextInt(5)
+    }
+
+    val coalgebra: CoalgebraM[IO, Hom[Ω, *], Ω] = CoalgebraM[IO, Hom[Ω, *], Ω] {
+      case edge: MEdge => L1(edge).pure[IO]
+    }
+
+    // owner -> consensus round
+    // -> broadcasts it to facilitators
+    // -> every facilitator create a proposal and broadcast it to all facilitators
+
+    val algebra: AlgebraM[IO, Hom[Ω, *], Ω] = AlgebraM[IO, Hom[Ω, *], Ω] {
+      // IO[Either[Error, Block]]
+      case l1: L1[MEdge, MBlock] => {
+        for {
+          ownerProposal = l1.a.a.sum
+            // send api request to node2 and node3 to start a consensus using my proposal
+
+            // I expect to receive node2 and node3 proposals
+          combined = ownerProposal
+        } yield MBlock(combined)
+      }
+
+      case as a facilitator => {
+        val a = txs from owner
+        broadcast my proposal to the owner and node3
+        I expect to receive proposal from node2 /// <-------
+      }
+    }
+
+    val scatter = coalgebra.scatter(Scatter.ana)
+    val gather = algebra.gather(Gather.cata)
+    val run: Ω => IO[Ω] = scheme.ghyloM(gather, scatter)
+
+//    def apply(edge: MEdge): L1 = ???
   }
 
   val pipeline = Stream[IO, Int](1, 2, 3, 4, 5)
     .chunkN(2, true)
     .map(_.toList)
-    .map(L1Cell(_))
-    .map(cell => cell.run(cell))
+    .map(MEdge) // List(L1Cell(1, 2), L1Cell(3, 4), L1Cell(5))
+    // .evalMap( A => F[B] )
+    .evalMap(L1.run(_))
     .compile
     .toList
 
