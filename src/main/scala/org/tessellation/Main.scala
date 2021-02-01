@@ -2,7 +2,7 @@ package org.tessellation
 
 import cats.Functor
 import cats.effect.{ExitCase, ExitCode, IO, IOApp, Sync}
-import org.tessellation.schema.{AciF, Cell, Cell0, Cell2, Cocell, Context, Hom, L0Consensus, L1Consensus, Topos, Ω}
+import org.tessellation.schema.{AciF, Cell, Cell0, Cell2, Cocell, Context, Hom, L1Consensus, L1Consensus, Topos, Ω}
 import org.tessellation.schema.Hom._
 import fs2.{Pipe, Stream}
 import cats.syntax.all._
