@@ -1,16 +1,18 @@
 package org.tessellation.schema
 
 import cats.arrow.{Arrow, ArrowChoice, CommutativeArrow}
+import cats.data.StateT
 import cats.free.Free
 import cats.syntax.all._
 import cats.kernel.{Monoid, PartialOrder}
-import cats.{Applicative, CoflatMap, Eq, Functor, Traverse, ~>}
+import cats.{Applicative, CoflatMap, Eq, Functor, Monad, Traverse, ~>}
 import fs2.Pipe
 import higherkindness.droste.data.{:<, Coattr}
 import higherkindness.droste.syntax.compose._
 import higherkindness.droste.util.DefaultTraverse
 import higherkindness.droste.{Algebra, _}
 import org.tessellation.schema.Hom.Endo
+import org.tessellation.schema.L1Consensus.StateM
 
 /**
   * Characteristic Sheaf just needs to be Poset
@@ -35,21 +37,6 @@ object Hom {
   import cats.syntax.functor._
 
   type Endo[O] = Hom[Ω, O]
-
-  def apply[A](a: A) = Cell[A, A](a)
-  def apply[A, B](a: A, b: B) = Cell2[A, B](a, b)
-  //todo use fusion to map in between run: Ω => (Hom[A, B], Ω)
-  def apply[A, B](run: A => (Cocell[A, B], B)) = Cocell[A, B](run)
-
-  implicit val arrowInstance: ArrowChoice[Hom] = new ArrowChoice[Hom] with CommutativeArrow[Hom] {
-    override def choose[A, B, C, D](f: Hom[A, C])(g: Hom[B, D]): Hom[Either[A, B], Either[C, D]] = ???
-
-    override def lift[A, B](f: A => B): Hom[A, B] = ???
-
-    override def compose[A, B, C](f: Hom[B, C], g: Hom[A, B]): Hom[A, C] = ???
-
-    override def first[A, B, C](fa: Hom[A, B]): Hom[(A, C), (B, C)] = ???
-  }
 
   val coalgebra: Coalgebra[Hom[Ω, ?], Ω] = Coalgebra[Hom[Ω, ?], Ω] { thing: Ω =>
     {
@@ -80,6 +67,16 @@ object Hom {
     case cell2 @ Cell2(a, b :< Cell2(c, d :< _)) => monoidΩ.combine(cell2.run(a), monoidΩ.combine(b, c))
   }
 
+  implicit val arrowInstance: ArrowChoice[Hom] = new ArrowChoice[Hom] with CommutativeArrow[Hom] {
+    override def choose[A, B, C, D](f: Hom[A, C])(g: Hom[B, D]): Hom[Either[A, B], Either[C, D]] = ???
+
+    override def lift[A, B](f: A => B): Hom[A, B] = ???
+
+    override def compose[A, B, C](f: Hom[B, C], g: Hom[A, B]): Hom[A, C] = ???
+
+    override def first[A, B, C](fa: Hom[A, B]): Hom[(A, C), (B, C)] = ???
+  }
+
   val ralgebra: RAlgebra[Ω, Hom[Ω, ?], Ω] = RAlgebra {
     case cell @ Cell(ohm) => cell.run(ohm) //todo cocell here
     case cell2 @ Cell2(ohm, (b, x)) =>
@@ -91,6 +88,13 @@ object Hom {
   val cvCoalgebra = CVCoalgebra[Endo, Ω] {
     case ohm: Ω => Cell2(ohm, Coattr.pure[Endo, Ω](ohm))
   }
+
+  def apply[A](a: A) = Cell[A, A](a)
+
+  def apply[A, B](a: A, b: B) = Cell2[A, B](a, b)
+
+  //todo use fusion to map in between run: Ω => (Hom[A, B], Ω)
+  def apply[A, B](run: A => (Cocell[A, B], B)) = Cocell[A, B](run)
 
   implicit val monoidΩ = new Monoid[Ω] {
     override def empty: Ω = ???
@@ -178,9 +182,22 @@ object Hom {
 }
 
 //todo Cv algebras here
-case class Cell[A, B](override val a: A) extends Topos[A, B] {}
+case class Cell[A, B](override val a: A) extends Topos[A, B] {
+  def runM[M[_]: Monad](terminal: Ω): M[Either[Ω, Ω]] = ???
+}
 
 object Cell {
+
+  def apply[M[_], F[_], A, B](
+    a: A, /* Edge(txs) */
+    algebraM: AlgebraM[M /* IO */, F /* StackF */, Either[Ω, Ω]],
+    coalgebraM: CoalgebraM[M /* IO */, F /* StackF */, Ω]
+  )(implicit M: Monad[M], T: Traverse[F]): Unit = new Cell(a) {
+
+    def runM(terminal: Ω): M[Either[Ω, Ω]] =
+      scheme.hyloM(algebraM, coalgebraM).apply(terminal)
+  }
+
   implicit val arrowInstance: Arrow[Cell] = new Arrow[Cell] {
     override def lift[A, B](f: A => B): Cell[A, B] = ???
 
@@ -189,7 +206,8 @@ object Cell {
     override def compose[A, B, C](f: Cell[B, C], g: Cell[A, B]): Cell[A, C] =
       // A ---> B ---> C
       f.run(g.run(g)).asInstanceOf[Cell[A, C]]
-//      Cell(g.transform).transform
+
+    //      Cell(g.transform).transform
   }
 }
 

@@ -3,7 +3,7 @@ package org.tessellation
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.syntax.all._
-import org.tessellation.schema.{L1Block, L1Edge, L1Transaction}
+import org.tessellation.schema.{Cell, L1Block, L1Edge, L1Transaction, StackL1Consensus}
 import fs2.Stream
 import org.tessellation.schema.L1Consensus.L1ConsensusError
 
@@ -23,9 +23,19 @@ object SingleL1ConsensusDemo extends IOApp {
 
       txs = Set(L1Transaction(12, "nodeA".some))
 
-      block <- nodeA.startL1Consensus(L1Edge(txs))
+      edge = L1Edge[L1Transaction](txs)
 
-      _ = Log.magenta(s"Output: ${block}")
+      // We create cell first and keep in cache eventually
+      l1Cell = Cell.apply(
+        edge,
+        StackL1Consensus.algebra,
+        StackL1Consensus.coalgebra
+      )
+
+      // Then we pass pre-created cell to consensus round
+      block <- nodeA.startL1Consensus(l1Cell)
+
+      //      _ = Log.magenta(s"Output: ${block}")
 
     } yield ExitCode.Success
 }

@@ -32,13 +32,25 @@ object StackF {
 
 object StackL1Consensus {
 
-  val coalgebra: CoalgebraM[IO, StackF, (L1ConsensusMetadata, Ω)] = CoalgebraM {
-    case (metadata, cmd) =>
+  val coalgebra: CoalgebraM[IO, StackF, StackL1Step] = CoalgebraM {
+    case StackL1Step(metadata, cmd) =>
       cmd match {
-        case block @ L1Block(_)             => IO { Done(block.asRight[L1ConsensusError]) }
-        case end @ ConsensusEnd(_)          => IO { Done(end.asRight[L1ConsensusError]) }
-        case response @ ProposalResponse(_) => IO { Done(response.asRight[L1ConsensusError]) }
-        case _ @L1Error(reason)             => IO { Done(L1ConsensusError(reason).asLeft[Ω]) }
+        case block @ L1Block(_) =>
+          IO {
+            Done(block.asRight[L1ConsensusError])
+          }
+        case end @ ConsensusEnd(_) =>
+          IO {
+            Done(end.asRight[L1ConsensusError])
+          }
+        case response @ ProposalResponse(_) =>
+          IO {
+            Done(response.asRight[L1ConsensusError])
+          }
+        case _ @L1Error(reason) =>
+          IO {
+            Done(L1ConsensusError(reason).asLeft[Ω])
+          }
         case _ =>
           scheme.hyloM(L1Consensus.algebra, L1Consensus.coalgebra).apply(cmd).run(metadata).map {
             case (m, cmd) => {
@@ -52,8 +64,16 @@ object StackL1Consensus {
       }
   }
 
+  case class StackL1Step(metadata: L1ConsensusMetadata, cmd: Ω) extends Ω
+
   val algebra: AlgebraM[IO, StackF, Either[L1ConsensusError, Ω]] = AlgebraM {
-    case More(a)      => IO { a }
-    case Done(result) => IO { result }
+    case More(a) =>
+      IO {
+        a
+      }
+    case Done(result) =>
+      IO {
+        result
+      }
   }
 }
