@@ -14,6 +14,7 @@ import monocle.syntax.apply._
 import org.tessellation.{Log, Node}
 import org.tessellation.schema.L1Consensus.BroadcastProposalResponse
 import org.tessellation.schema.L1TransactionPool.L1TransactionPoolEnqueue
+import org.tessellation.schema.StackL1Consensus.StackL1Step
 
 import scala.util.Random
 
@@ -237,19 +238,24 @@ object L1Consensus {
       )
       val input = ReceiveProposal()
 
-      scheme.hyloM(StackL1Consensus.algebra, StackL1Consensus.coalgebra).apply((initialState, input)).flatMap {
-        case Right(ProposalResponse(txs)) => {
-          Log.logNode(metadata.context.peer)(
-            s"[${metadata.context.peer.id}][ProposalResponse] ${txs.toList.sortBy(_.a)}"
-          )
-          IO { BroadcastProposalResponse(request.roundId, request.proposal, txs) }
+      scheme
+        .hyloM(StackL1Consensus.algebra, StackL1Consensus.coalgebra)
+        .apply(StackL1Step(initialState, input))
+        .flatMap {
+          case Right(ProposalResponse(txs)) => {
+            Log.logNode(metadata.context.peer)(
+              s"[${metadata.context.peer.id}][ProposalResponse] ${txs.toList.sortBy(_.a)}"
+            )
+            IO {
+              BroadcastProposalResponse(request.roundId, request.proposal, txs)
+            }
+          }
+          case Left(L1ConsensusError(reason)) => {
+            // TODO: in case of other flow in algebras, handle error
+            Log.red("unexpected")
+            IO.raiseError(L1ConsensusError(reason))
+          }
         }
-        case Left(L1ConsensusError(reason)) => {
-          // TODO: in case of other flow in algebras, handle error
-          Log.red("unexpected")
-          IO.raiseError(L1ConsensusError(reason))
-        }
-      }
     }
 
     val r = for {

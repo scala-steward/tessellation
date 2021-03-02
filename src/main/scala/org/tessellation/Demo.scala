@@ -26,7 +26,7 @@ object SingleL1ConsensusDemo extends IOApp {
       edge = L1Edge[L1Transaction](txs)
 
       // We create cell first and keep in cache eventually
-      l1Cell = Cell.apply(
+      l1Cell = Cell.create(
         edge,
         StackL1Consensus.algebra,
         StackL1Consensus.coalgebra
@@ -35,7 +35,7 @@ object SingleL1ConsensusDemo extends IOApp {
       // Then we pass pre-created cell to consensus round
       block <- nodeA.startL1Consensus(l1Cell)
 
-      //      _ = Log.magenta(s"Output: ${block}")
+      _ = Log.magenta(s"Output: ${block}")
 
     } yield ExitCode.Success
 }
@@ -74,12 +74,19 @@ object StreamTransactionsDemo extends IOApp {
         .chunkN(txsInChunk)
         .map(_.toList.toSet)
         .map(L1Edge[L1Transaction])
-        .map { edge =>
+        .map(
+          Cell.create(
+            _,
+            StackL1Consensus.algebra,
+            StackL1Consensus.coalgebra
+          )
+        )
+        .map { cell =>
           Stream.eval {
             s.tryAcquire.ifM(
-              nodeA.startL1Consensus(edge).guarantee(s.release),
+              nodeA.startL1Consensus(cell).guarantee(s.release),
               IO {
-                println(s"store txs = ${edge.txs}")
+                println(s"store txs = ${cell.a.txs}")
                 L1Block(Set.empty).asRight[L1ConsensusError] // TODO: ???
               }
             )

@@ -32,7 +32,7 @@ object StackF {
 
 object StackL1Consensus {
 
-  val coalgebra: CoalgebraM[IO, StackF, StackL1Step] = CoalgebraM {
+  val coalgebra: CoalgebraM[IO, StackF, Ω] = CoalgebraM {
     case StackL1Step(metadata, cmd) =>
       cmd match {
         case block @ L1Block(_) =>
@@ -57,7 +57,7 @@ object StackL1Consensus {
               if (cmd.isLeft) {
                 Done(L1ConsensusError(cmd.left.get.reason).asLeft[Ω])
               } else {
-                More((m, cmd.right.get))
+                More(StackL1Step(m, cmd.right.get))
               }
             }
           }

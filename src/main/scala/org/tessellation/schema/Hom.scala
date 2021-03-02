@@ -188,13 +188,13 @@ case class Cell[A, B](override val a: A) extends Topos[A, B] {
 
 object Cell {
 
-  def apply[M[_], F[_], A, B](
+  def create[M[_], F[_], A, E](
     a: A, /* Edge(txs) */
-    algebraM: AlgebraM[M /* IO */, F /* StackF */, Either[Ω, Ω]],
+    algebraM: AlgebraM[M /* IO */, F /* StackF */, Either[E, Ω]],
     coalgebraM: CoalgebraM[M /* IO */, F /* StackF */, Ω]
-  )(implicit M: Monad[M], T: Traverse[F]): Unit = new Cell(a) {
+  )(implicit M: Monad[M], T: Traverse[F]): Cell[A, Ω] = new Cell[A, Ω](a) {
 
-    def runM(terminal: Ω): M[Either[Ω, Ω]] =
+    def runM(terminal: Ω): M[Either[E, Ω]] =
       scheme.hyloM(algebraM, coalgebraM).apply(terminal)
   }
 

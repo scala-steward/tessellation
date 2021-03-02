@@ -12,7 +12,6 @@ import org.tessellation.schema.{
   Hom,
   L1Consensus,
   L1Edge,
-  L1Transaction,
   L1TransactionPool,
   StackL1Consensus,
   Topos,

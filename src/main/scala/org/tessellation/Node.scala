@@ -6,6 +6,7 @@ import cats.syntax.all._
 import higherkindness.droste.scheme
 import org.tessellation.schema.L1Consensus.{L1ConsensusContext, L1ConsensusError, L1ConsensusMetadata}
 import org.tessellation.schema.L1TransactionPool.L1TransactionPoolEnqueue
+import org.tessellation.schema.StackL1Consensus.StackL1Step
 import org.tessellation.schema.{Cell, L1Block, L1Edge, L1Transaction, L1TransactionPool, StackL1Consensus, Ω}
 
 import scala.concurrent.duration.DurationInt
@@ -27,7 +28,7 @@ case class Node(id: String, txPool: L1TransactionPoolEnqueue) {
     peers.modify(p => (p + node, ()))
 
   def startL1Consensus(
-    cell: Cell[L1Edge[L1Transaction], L1Block]
+    cell: Cell[L1Edge[L1Transaction], Ω]
   ): IO[Unit] =
     for {
       _ <- rounds.modify(n => (n + 1, ()))
@@ -36,6 +37,7 @@ case class Node(id: String, txPool: L1TransactionPoolEnqueue) {
       initialState = L1ConsensusMetadata.empty(context)
       _ <- IO.sleep(1.second)(IO.timer(scala.concurrent.ExecutionContext.global))
 
+      //      _ <- cell.runM(StackL1Step(initialState, ))
       // TODO:  _ <- cell.run(initialState)
       _ <- rounds.modify(n => (n - 1, ()))
     } yield ()
