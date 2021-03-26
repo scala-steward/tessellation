@@ -3,26 +3,20 @@ package org.tessellation
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.syntax.all._
-import fs2.Stream
-import org.tessellation.consensus.transaction.L1EdgeFactory
-import org.tessellation.consensus.transaction.L1TransactionSorter
-import fs2.concurrent.Signal
-import fs2.{Pipe, Pull, Stream}
-import org.tessellation.consensus.{L1Block, L1Cell, L1Edge, L1Transaction}
-import org.tessellation.schema.{CellError, Ω}
-import org.tessellation.snapshot.{L0Cell, L0Edge, Snapshot}
-import org.tessellation.schema.CellError
+import fs2.{Pull, Stream}
 import org.tessellation.consensus.transaction.RandomTransactionGenerator
+import org.tessellation.consensus._
+import org.tessellation.schema.{CellError, Ω}
+import org.tessellation.snapshot.{L0Cell, L0Edge}
 
 import scala.concurrent.duration._
-import scala.util.Random
 
 object SingleL1ConsensusDemo extends IOApp {
   override def run(args: List[String]): IO[ExitCode] =
     for {
-      nodeA <- Node.run("nodeA")
-      nodeB <- Node.run("nodeB")
-      nodeC <- Node.run("nodeC")
+      nodeA <- Node.run("nodeA", "A")
+      nodeB <- Node.run("nodeB", "B")
+      nodeC <- Node.run("nodeC", "C")
 
       _ <- nodeA.joinTo(Set(nodeB, nodeC))
       _ <- nodeB.joinTo(Set(nodeA, nodeC))
@@ -44,13 +38,13 @@ object WaitingPoolDemo extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
     val maxRoundsInProgress = 2
     val parallelJobs = 3
-    val edgeFactory = L1EdgeFactory()
+    val edgeFactory = L1EdgeFactory("nodeA")
 
     val cluster: Stream[IO, (Node, Node, Node)] = Stream.eval {
       for {
-        nodeA <- Node.run("nodeA")
-        nodeB <- Node.run("nodeB")
-        nodeC <- Node.run("nodeC")
+        nodeA <- Node.run("nodeA", "A")
+        nodeB <- Node.run("nodeB", "B")
+        nodeC <- Node.run("nodeC", "C")
 
         _ <- nodeA.joinTo(Set(nodeB, nodeC))
         _ <- nodeB.joinTo(Set(nodeA, nodeC))
@@ -118,14 +112,13 @@ object RandomDemo extends IOApp {
     val nTxs = 20
     val maxRoundsInProgress = 2
     val parallelJobs = 3
-    val transactionGenerator = RandomTransactionGenerator(Some("A"))
-    val edgeFactory = L1EdgeFactory()
+    val edgeFactory = L1EdgeFactory("nodeA")
 
     val cluster: Stream[IO, (Node, Node, Node)] = Stream.eval {
       for {
-        nodeA <- Node.run("nodeA")
-        nodeB <- Node.run("nodeB")
-        nodeC <- Node.run("nodeC")
+        nodeA <- Node.run("nodeA", "A")
+        nodeB <- Node.run("nodeB", "B")
+        nodeC <- Node.run("nodeC", "C")
 
         _ <- nodeA.joinTo(Set(nodeB, nodeC))
         _ <- nodeB.joinTo(Set(nodeA, nodeC))
@@ -133,9 +126,9 @@ object RandomDemo extends IOApp {
       } yield (nodeA, nodeB, nodeC)
     }
 
-    val transactions: Stream[IO, L1Transaction] =
+    def transactions(txGenerator: RandomTransactionGenerator): Stream[IO, L1Transaction] =
       Stream
-        .repeatEval(transactionGenerator.generateRandomTransaction())
+        .repeatEval(txGenerator.generateRandomTransaction())
         .metered(generateTxEvery)
         .take(nTxs)
 
@@ -143,12 +136,8 @@ object RandomDemo extends IOApp {
       (nodeA, nodeB, nodeC) <- cluster
 
       s <- Stream.eval(Semaphore[IO](maxRoundsInProgress))
-      txs <- transactions
+      txs <- transactions(nodeA.txGenerator) // We simulate transactions coming to nodeA from address A
         .through(edgeFactory.createEdges)
-        .through(sorter.optimize)
-        .chunkN(txsInChunk)
-        .map(_.toList.toSet)
-        .map(L1Edge)
         .map(L1Cell)
         .map { l1cell =>
           Stream.eval {
@@ -186,7 +175,7 @@ object StreamBlocksDemo extends IOApp {
 
   val blocks: Stream[IO, L1Block] = Stream
     .range[IO](1, 100)
-    .map(L1Transaction(_))
+    .map(a => L1Transaction(a, "A", "B", "", a))
     .map(Set(_))
     .map(L1Block)
     .metered(1.second)

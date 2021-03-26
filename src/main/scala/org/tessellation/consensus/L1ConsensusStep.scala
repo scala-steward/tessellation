@@ -9,6 +9,7 @@ import org.tessellation.consensus.L1TransactionPool.L1TransactionPoolEnqueue
 import org.tessellation.schema.{CellError, Ω}
 import org.tessellation.{Log, Node}
 import monocle.macros.syntax.lens._
+import org.tessellation.consensus.transaction.RandomTransactionGenerator
 
 import scala.util.Random
 
@@ -128,14 +129,19 @@ object L1ConsensusStep {
       Log.logNode(context.peer)(
         s"\n[${context.peer.id}] InitialState: facilitators=${initialState.facilitators}, txs=${initialState.txs}"
       )
-      val input = ReceiveProposal(L1Edge(Set.empty)) // TODO: cell cache
+
+      val txs = context.peer.txGenerator.generateRandomTransaction().unsafeRunSync()
+
+      val input = ReceiveProposal(L1Edge(Set(txs))) // TODO: cell cache
 
       scheme.hyloM(L1Consensus.algebra, L1Consensus.coalgebra).apply((initialState, input)).flatMap {
         case Right(ProposalResponse(txs)) => {
           Log.logNode(metadata.context.peer)(
             s"[${metadata.context.peer.id}][ProposalResponse] ${txs.toList.sortBy(_.a)}"
           )
-          IO { BroadcastProposalResponse(request.roundId, request.proposal, txs) }
+          IO {
+            BroadcastProposalResponse(request.roundId, request.proposal, txs)
+          }
         }
         case Left(CellError(reason)) => {
           // TODO: in case of other flow in algebras, handle error
@@ -210,7 +216,8 @@ object L1ConsensusStep {
 
   case class L1ConsensusContext(
     peer: Node,
-    peers: Set[Node]
+    peers: Set[Node],
+    txGenerator: RandomTransactionGenerator
   )
 
   case class L1ConsensusMetadata(

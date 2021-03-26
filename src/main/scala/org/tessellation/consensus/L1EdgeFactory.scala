@@ -1,55 +1,37 @@
-package org.tessellation.consensus.transaction
+package org.tessellation.consensus
 
+import cats.effect.IO
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, IO}
 import cats.implicits._
 import fs2._
-import fs2.concurrent.Queue
 import org.tessellation.Log
-import org.tessellation.consensus.{L1Edge, L1Transaction}
 
-import scala.collection.immutable.{SortedSet, TreeSet}
+import scala.collection.immutable.TreeSet
 
-class L1EdgeFactory()(implicit O: Ordering[L1Transaction]) {
+class L1EdgeFactory(node: String)(implicit O: Ordering[L1Transaction]) {
   type Address = String
   type TransactionHash = String
 
-  private val lastAccepted: Ref[IO, Map[Address, TransactionHash]] = Ref.unsafe(Map.empty)
-  private val waitingTransactions: Ref[IO, Map[Address, TreeSet[L1Transaction]]] = Ref.unsafe(Map.empty)
-  private val readyTransactions: Ref[IO, Map[Address, TreeSet[L1Transaction]]] = Ref.unsafe(Map.empty)
-  private val transactionsPerEdge = 5
+  private[consensus] val lastAccepted: Ref[IO, Map[Address, TransactionHash]] = Ref.unsafe(Map.empty)
+  private[consensus] val waitingTransactions: Ref[IO, Map[Address, TreeSet[L1Transaction]]] = Ref.unsafe(Map.empty)
+  private[consensus] val readyTransactions: Ref[IO, Map[Address, TreeSet[L1Transaction]]] = Ref.unsafe(Map.empty)
+  private[consensus] val transactionsPerEdge = 5
 
-  def createEdges: Pipe[IO, L1Transaction, L1Edge[L1Transaction]] = { a =>
-    val x = a.evalMap { incomingTransaction =>
+  def createEdges: Pipe[IO, L1Transaction, L1Edge] = { incomingTransactions =>
+    def optimizeWithReadyPool(incomingTransaction: L1Transaction): IO[TreeSet[L1Transaction]] =
       isParentAccepted(incomingTransaction)
         .ifM(
-          IO(Log.red(s"[Accepted] ${incomingTransaction}"))
-            .flatMap(
-              _ =>
-                dequeue1ReadyTransactions().handleErrorWith(
-                  e =>
-                    IO {
-                      Log.white(s"ERR: $e")
-                    }.map(_ => TreeSet.empty)
-                )
-            )
-            .map(_ + incomingTransaction)
-            .map(L1Edge[L1Transaction](_)),
-          IO(Log.red(s"[NotAccepted (put to WaitingPool)] ${incomingTransaction}")) >> wait(incomingTransaction)
-            .flatMap(
-              _ =>
-                dequeue1ReadyTransactions().handleErrorWith(
-                  e =>
-                    IO {
-                      Log.white(s"ERR: $e")
-                    }.map(_ => TreeSet.empty)
-                )
-            )
-            .map(L1Edge[L1Transaction](_))
+          IO(Log.red(s"[$node][Accepted] ${incomingTransaction}")) >> dequeue1ReadyTransactions()
+            .map(_ + incomingTransaction),
+          IO(Log.red(s"[$node][NotAccepted (put to WaitingPool)] ${incomingTransaction}")) >> wait(incomingTransaction) >> dequeue1ReadyTransactions()
         )
-    }
 
-    x.filter(_.txs.nonEmpty).evalTap(edge => IO(Log.red(s"[Created Edge] ${edge}")))
+    incomingTransactions
+      .evalMap(optimizeWithReadyPool)
+      .filter(_.nonEmpty)
+      .map(_.toList.toSet)
+      .map(L1Edge)
+      .evalTap(edge => IO(Log.red(s"[$node][Created Edge] ${edge}")))
   }
 
   private def wait(transaction: L1Transaction): IO[Unit] =
@@ -105,7 +87,7 @@ class L1EdgeFactory()(implicit O: Ordering[L1Transaction]) {
       }
 
       _ <- IO {
-        Log.white(s"[ConsensusEnd] $acceptedTransaction")
+        Log.white(s"[$node][ConsensusEnd] $acceptedTransaction")
       }
 
       _ <- readyTransactions.get.flatTap { t =>
@@ -126,5 +108,5 @@ object L1EdgeFactory {
   implicit val ordinalNumberOrdering: Ordering[L1Transaction] = (x: L1Transaction, y: L1Transaction) =>
     implicitly[Ordering[Int]].compare(x.ordinal, y.ordinal)
 
-  def apply(): L1EdgeFactory = new L1EdgeFactory()(ordinalNumberOrdering)
+  def apply(node: String): L1EdgeFactory = new L1EdgeFactory(node: String)(ordinalNumberOrdering)
 }

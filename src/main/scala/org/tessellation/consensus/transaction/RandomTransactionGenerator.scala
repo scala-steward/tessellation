@@ -7,7 +7,7 @@ import org.tessellation.consensus.L1Transaction
 
 import scala.util.Random
 
-class RandomTransactionGenerator(src: Option[String] = None) {
+class RandomTransactionGenerator(node: String, src: Option[String] = None) {
   private val addresses = Set("A", "B", "C")
   private val generatedTxs: Ref[IO, Map[String, L1Transaction]] = Ref.unsafe(Map.empty)
 
@@ -24,7 +24,7 @@ class RandomTransactionGenerator(src: Option[String] = None) {
         (txs.updated(src, tx), tx)
       }
       _ <- IO {
-        Log.blue(s"Generated transaction: $tx")
+        Log.blue(s"[$node][Generated random transaction] $tx")
       }
     } yield tx
 
@@ -42,5 +42,7 @@ class RandomTransactionGenerator(src: Option[String] = None) {
 }
 
 object RandomTransactionGenerator {
-  def apply(src: Option[String] = None): RandomTransactionGenerator = new RandomTransactionGenerator(src)
+
+  def apply(node: String, src: Option[String] = None): RandomTransactionGenerator =
+    new RandomTransactionGenerator(node, src)
 }
