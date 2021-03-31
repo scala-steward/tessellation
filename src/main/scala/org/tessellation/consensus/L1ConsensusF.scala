@@ -4,6 +4,8 @@ import cats.{Applicative, Traverse}
 import cats.syntax.all._
 import higherkindness.droste.util.DefaultTraverse
 import L1ConsensusStep.BroadcastProposalResponse
+import io.chrisdavenport.fuuid.FUUID
+import org.tessellation.Node
 import org.tessellation.schema.{Hom, Ω}
 
 import java.util.Calendar
@@ -19,8 +21,6 @@ case class L1Transaction(
 
   override def toString: String =
     s"Tx$ordinal($src -> $dst)"
-
-  //    s"L1Transaction($ordinal: $src -> $dst, hash $hash, parentHash $parentHash)"
 }
 
 object L1Transaction {}
@@ -41,7 +41,8 @@ case class StartOwnRound[A](edge: L1Edge) extends L1ConsensusF[A]
 /**
   * Input as facilitator
   */
-case class ReceiveProposal[A](edge: L1Edge) extends L1ConsensusF[A]
+case class ReceiveProposal[A](roundId: FUUID, proposalNode: Node, receivedEdge: L1Edge, ownEdge: L1Edge)
+    extends L1ConsensusF[A]
 
 case class BroadcastProposal[A]() extends L1ConsensusF[A]
 

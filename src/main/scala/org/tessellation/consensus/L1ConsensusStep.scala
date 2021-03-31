@@ -21,16 +21,15 @@ object L1ConsensusStep {
   // TODO: Use Reader monad -> Reader[L1ConsensusContext, Ω]
   val coalgebra: CoalgebraM[StateM, L1ConsensusF, Ω] = CoalgebraM {
 
-    // TODO: Use StartOwnRound
     case StartOwnRound(edge) =>
-      generateRoundId() >> storeTransactions(edge.txs) >> selectFacilitators(2) >> StateT[
+      generateRoundId() >> storeOwnTransactions(edge.txs) >> selectFacilitators(2) >> StateT[
         IO,
         L1ConsensusMetadata,
         L1ConsensusF[Ω]
       ] { metadata =>
         IO {
           Log.logNode(metadata.context.peer)(
-            s"[${metadata.context.peer.id}][L1Edge] Stored transactions: ${edge.txs.toList.sortBy(_.a)}"
+            s"[${metadata.context.peer.id}][${metadata.roundId}][StartOwnRound] Locked transactions ${edge.txs.toList.sortBy(_.a)} and running consensus"
           )
           (metadata, BroadcastProposal())
         }
@@ -45,23 +44,26 @@ object L1ConsensusStep {
         }
       }
 
-    case ReceiveProposal(edge) =>
-      storeTransactions(edge.txs) >>
+    case ReceiveProposal(roundId, proposalNode, proposalEdge, ownEdge) =>
+      storeRoundId(roundId) >> storeOwnTransactions(proposalEdge.txs) >>
         StateT[IO, L1ConsensusMetadata, L1ConsensusF[Ω]] { metadata =>
           IO {
-            val txs = edge.txs
             val roundId = metadata.roundId.get
+
             val state = metadata.lens(_.txs).modify { t =>
-              t.updatedWith(roundId) {
-                case Some(mapping) => (mapping + (metadata.context.peer -> txs)).some
-                case None          => Map[Node, Set[L1Transaction]](metadata.context.peer -> txs).some
+              t.updatedWith(roundId) { prev =>
+                prev
+                  .map(_.updated(metadata.context.peer, ownEdge.txs).updated(proposalNode, proposalEdge.txs))
+                  .orElse(Map(metadata.context.peer -> ownEdge.txs, proposalNode -> proposalEdge.txs).some)
               }
             }
 
             Log.logNode(metadata.context.peer)(
-              s"[${metadata.context.peer.id}][ReceiveProposal] Stored transaction (pull): ${state.txs
-                .get(roundId)
-                .flatMap(_.get(metadata.context.peer).map(_.toList.sortBy(_.a)))}"
+              s"[${metadata.context.peer.id}][${metadata.roundId}][ReceiveProposal] Received proposal ${proposalEdge.txs} from (${proposalNode.id}). Broadcasting facilitator proposal ${ownEdge.txs}."
+            )
+
+            Log.logNode(metadata.context.peer)(
+              s"[${metadata.context.peer.id}][${metadata.roundId}][ReceiveProposal] Stored for round: ${state.txs.get(roundId).map(_.values.flatten.toSet)}"
             )
 
             (state, BroadcastReceivedProposal())
@@ -114,27 +116,12 @@ object L1ConsensusStep {
   }
 
   def broadcastProposal(): StateM[Either[CellError, List[BroadcastProposalResponse]]] = StateT { metadata =>
-    // TODO: apiCall peer should be taken from node
-    def apiCall(
-      request: BroadcastProposalRequest,
-      from: Node,
-      context: L1ConsensusContext
-    ): IO[BroadcastProposalResponse] = {
-      val initialState = L1ConsensusMetadata(
-        context = context,
-        txs = Map(metadata.roundId.get -> Map(from -> request.proposal)),
-        facilitators = request.facilitators.some,
-        roundId = request.roundId.some
-      )
-      Log.logNode(context.peer)(
-        s"\n[${context.peer.id}] InitialState: facilitators=${initialState.facilitators}, txs=${initialState.txs}"
-      )
+    def simulateHttpConsensusRequest(request: BroadcastProposalRequest, caller: Node, context: L1ConsensusContext): IO[BroadcastProposalResponse] = {
+      val facilitatorTxs = context.peer.txGenerator.generateRandomTransaction().unsafeRunSync()
+      val facilitatorCell = L1Cell(L1Edge(Set(facilitatorTxs)))
+      val facilitatorConsensus = context.peer.participateInL1Consensus(request.roundId, caller, L1Edge(request.proposal), facilitatorCell)
 
-      val txs = context.peer.txGenerator.generateRandomTransaction().unsafeRunSync()
-
-      val input = ReceiveProposal(L1Edge(Set(txs))) // TODO: cell cache
-
-      scheme.hyloM(L1Consensus.algebra, L1Consensus.coalgebra).apply((initialState, input)).flatMap {
+      facilitatorConsensus.flatMap {
         case Right(ProposalResponse(txs)) => {
           Log.logNode(metadata.context.peer)(
             s"[${metadata.context.peer.id}][ProposalResponse] ${txs.toList.sortBy(_.a)}"
@@ -144,18 +131,17 @@ object L1ConsensusStep {
           }
         }
         case Left(CellError(reason)) => {
-          // TODO: in case of other flow in algebras, handle error
           Log.red("unexpected")
           IO.raiseError(CellError(reason))
         }
       }
     }
 
-    val r = for {
+    val responsesFromFacilitators = for {
       facilitators <- metadata.facilitators.map(_.filterNot(_ == metadata.context.peer))
       _ <- Option {
         Log.logNode(metadata.context.peer)(
-          s"[${metadata.context.peer.id}] [BroadcastProposal] Facilitators: ${facilitators}"
+          s"[${metadata.context.peer.id}][${metadata.roundId}][BroadcastProposal] Broadcasting proposal to facilitators: ${facilitators.map(_.id)}"
         )
         ()
       }
@@ -163,7 +149,7 @@ object L1ConsensusStep {
       request <- metadata.roundId.map(BroadcastProposalRequest(_, txs, facilitators))
       responses <- facilitators.toList.parTraverse { facilitator =>
         (for {
-          proposalResponse <- apiCall(
+          proposalResponse <- simulateHttpConsensusRequest(
             request,
             metadata.context.peer,
             metadata.context
@@ -175,7 +161,7 @@ object L1ConsensusStep {
     } yield responses
 
     // TODO: handle Either instead of Option above
-    r.sequence
+    responsesFromFacilitators.sequence
       .map(_.map(_.sequence).getOrElse(List.empty.asRight[CellError]))
       .map((metadata, _))
 
@@ -188,7 +174,7 @@ object L1ConsensusStep {
       .map(o => (metadata.lens(_.roundId).set(o), ()))
   }
 
-  def storeTransactions(txs: Set[L1Transaction]): StateM[Unit] = StateT { metadata =>
+  def storeOwnTransactions(txs: Set[L1Transaction]): StateM[Unit] = StateT { metadata =>
     IO {
       (metadata.lens(_.txs).modify { t =>
         t.updatedWith(metadata.roundId.get) { prev =>
@@ -197,6 +183,12 @@ object L1ConsensusStep {
             .orElse(Map(metadata.context.peer -> txs).some)
         }
       }, ())
+    }
+  }
+
+  def storeRoundId(roundId: FUUID): StateM[Unit] = StateT { metadata =>
+    IO {
+      (metadata.lens(_.roundId).set(roundId.some), ())
     }
   }
 
