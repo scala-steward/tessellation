@@ -74,9 +74,6 @@ class L1EdgeFactoryTest
     val edges = scenario.compile.toList.unsafeRunSync()
     val waiting = edgeFactory.waitingTransactions.get.unsafeRunSync().values.flatten.toSet
     val ready = edgeFactory.readyTransactions.get.unsafeRunSync().values.flatten.toSet
-    println(edges)
-    println(waiting)
-    println(ready)
 
     edges shouldBe List(L1Edge(Set(tx1)))
     waiting shouldBe Set()

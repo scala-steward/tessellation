@@ -39,10 +39,10 @@ sealed trait L1ConsensusF[A] extends Hom[Ω, A]
 case class StartOwnRound[A](edge: L1Edge) extends L1ConsensusF[A]
 
 /**
-  * Input as facilitator
-  */
-case class ReceiveProposal[A](roundId: FUUID, proposalNode: Node, receivedEdge: L1Edge, ownEdge: L1Edge)
-    extends L1ConsensusF[A]
+ * Input as facilitator
+ */
+case class ReceiveProposal[A](roundId: FUUID, consensusOwner: Node, facilitators: Set[Node], caller: Node, callerProposal: L1Edge, ownProposal: L1Edge)
+  extends L1ConsensusF[A]
 
 case class BroadcastProposal[A]() extends L1ConsensusF[A]
 
@@ -59,9 +59,9 @@ case class L1Error[A](reason: String) extends L1ConsensusF[A]
 case class ConsensusEnd[A](responses: List[BroadcastProposalResponse]) extends L1ConsensusF[A]
 
 /**
-  * Output as facilitator
-  */
-case class ProposalResponse[A](txs: Set[L1Transaction]) extends L1ConsensusF[A]
+ * Output as facilitator
+ */
+case class ProposalResponse[A](txs: L1Edge) extends L1ConsensusF[A]
 
 object L1ConsensusF {
   implicit val traverse: Traverse[L1ConsensusF] = new DefaultTraverse[L1ConsensusF] {

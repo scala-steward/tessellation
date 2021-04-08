@@ -6,12 +6,12 @@ import cats.syntax.all._
 import io.chrisdavenport.fuuid.FUUID
 import org.tessellation.consensus.L1ConsensusStep.L1ConsensusContext
 import org.tessellation.consensus.transaction.RandomTransactionGenerator
-import org.tessellation.consensus.{L1Cell, L1Edge, L1Transaction, ReceiveProposal, StartOwnRound}
+import org.tessellation.consensus.{L1Cell, L1CellCache, L1Edge, L1Transaction, ReceiveProposal, StartOwnRound}
 import org.tessellation.schema.{CellError, Ω}
 
 import scala.concurrent.duration.DurationInt
 
-case class Node(id: String, txGenerator: RandomTransactionGenerator) {
+case class Node(id: String, txGenerator: RandomTransactionGenerator, cellCache: L1CellCache) {
   private val peers = Ref.unsafe[IO, Set[Node]](Set.empty[Node])
 
   def joinTo(nodes: Set[Node]): IO[Unit] =
@@ -24,15 +24,17 @@ case class Node(id: String, txGenerator: RandomTransactionGenerator) {
     peers.modify(p => (p + node, ()))
 
   def participateInL1Consensus(
-     roundId: FUUID,
-     proposalNode: Node,
-     receiverProposal: L1Edge,
-     cachedCell: L1Cell
-  ): IO[Either[CellError, Ω]] =
+                                roundId: FUUID,
+                                consensusOwner: Node,
+                                caller: Node,
+                                callerProposal: L1Edge,
+                                facilitators: Set[Node],
+                              ): IO[Either[CellError, Ω]] =
     for {
+      facilitatorCell <- cellCache.pullCell(roundId)
       peers <- peers.get
       context = L1ConsensusContext(peer = this, peers = peers, txGenerator = txGenerator)
-      ohm <- cachedCell.run(context, ownProposal => ReceiveProposal(roundId, proposalNode, receiverProposal, ownProposal))
+      ohm <- facilitatorCell.run(context, ownProposal => ReceiveProposal(roundId, consensusOwner, facilitators, caller, callerProposal, ownProposal))
     } yield ohm
 
   def startL1Consensus(cell: L1Cell): IO[Either[CellError, Ω]] =
@@ -50,7 +52,7 @@ object Node {
   def run(id: String, txSrc: String): IO[Node] =
     for {
       node <- IO.pure {
-        Node(id, RandomTransactionGenerator(id, Some(txSrc)))
+        Node(id, RandomTransactionGenerator(id, Some(txSrc)), L1CellCache())
       }
     } yield node
 }
