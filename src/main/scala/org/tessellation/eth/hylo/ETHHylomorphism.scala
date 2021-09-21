@@ -85,7 +85,7 @@ object ETHHylomorphism {
     for {
       dagAddress <- extractDAGAddress(tx).toEitherT[IO]
       ethOffer <- extractETHValue(tx).toEitherT[IO]
-      _ <- EitherT.liftF(logger.debug(s"[${tx.getHash}] Swapping $ethOffer ETH for DAG address $dagAddress"))
+      _ <- EitherT.liftF(logger.info(s"[${tx.getHash}] Swapping $ethOffer ETH for DAG address $dagAddress"))
       dagTransaction <- liquidityPool
         .swap(ethOffer) { dagOffer =>
           L1Transaction(dagOffer, liquidityPool.yAddress, dagAddress).pure[IO]
@@ -118,13 +118,13 @@ object ETHHylomorphism {
     client: ETHBlockchainClient
   ): EitherT[IO, ETHHylomorphismError, String] =
     for {
-      _ <- EitherT.liftF(logger.debug(s"Sending raw transaction with hex: $signedHexTransaction"))
+      _ <- EitherT.liftF(logger.info(s"Sending raw transaction with hex: $signedHexTransaction"))
       hash <- client
         .sendTransaction(signedHexTransaction)
         .attemptT
         .leftMap[ETHHylomorphismError](_ => SendETHTransactionError(signedHexTransaction))
 
-      _ <- EitherT.liftF(logger.debug(s"[$hash] Getting transaction from chain"))
+      _ <- EitherT.liftF(logger.info(s"[$hash] Getting transaction from chain"))
 
       _ <- EitherT.fromOptionF[IO, ETHHylomorphismError, Transaction](
         client.getByHash(hash),

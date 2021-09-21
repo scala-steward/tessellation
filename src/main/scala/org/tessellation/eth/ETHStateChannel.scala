@@ -30,7 +30,7 @@ class ETHStateChannel(
   private val emissionInput: Stream[IO, ReceivedETHEmission[Ω]] =
     emissionQueue.dequeue
       .map(emission => ReceivedETHEmission[Ω](emission))
-      .evalTap(x => logger.debug(x.toString))
+      .evalTap(x => logger.info(x.toString))
   private val blocksInput: Stream[IO, ReceivedETHBlock[Ω]] = blockchainClient.blocks.map { block =>
     val blockNumber = block.getBlock.getNumber
     val blockTxs = block.getBlock.getTransactions.asScala.toList.toSet.asInstanceOf[Set[Transaction]]
@@ -39,7 +39,7 @@ class ETHStateChannel(
     ETHBlock(blockNumber, lpTxs)
   }.filter(_.transactions.nonEmpty)
     .map(block => ReceivedETHBlock[Ω](block))
-    .evalTap(x => logger.debug(x.toString))
+    .evalTap(x => logger.info(x.toString))
 
   val l1Input: Stream[IO, Ω] = blocksInput.merge(emissionInput)
 
@@ -49,9 +49,9 @@ class ETHStateChannel(
       .flatMap {
         case Left(error) => Stream.eval(logger.error(error)("ETHCell failed!")) >> Stream.raiseError[IO](error)
         case Right(eth: ETHSwapEnd[Ω]) =>
-          Stream.eval(logger.debug(s"ETHCell produced block: ${eth.block}")).as(eth.block)
+          Stream.eval(logger.info(s"ETHCell produced block: ${eth.block}")).as(eth.block)
         case Right(eth: ETHEmissionEnd[Ω]) =>
-          Stream.eval(logger.debug(s"Emission succeeded: ${eth.hash}")).as(L1Block(Set.empty[L1Transaction]))
+          Stream.eval(logger.info(s"Emission succeeded: ${eth.hash}")).as(L1Block(Set.empty[L1Transaction]))
         case a @ _ => {
           val err = CellError(s"Invalid Ω type: ${a}")
           Stream.eval(logger.error(err)("ETHCell failed!")) >> Stream.raiseError[IO](err)
