@@ -4,6 +4,7 @@ import java.security.KeyPair
 
 import cats.effect._
 import cats.effect.std.{Random, Supervisor}
+import cats.implicits.toSemigroupKOps
 import cats.syntax.show._
 
 import org.tesselation.cli.config.CliMethod
@@ -23,6 +24,7 @@ import org.tesselation.resources.{AppResources, MkHttpServer}
 import org.tesselation.schema.node.NodeState
 import org.tesselation.schema.peer.PeerId
 
+import org.tessellation.csv.{CSVExample, CSVHandler}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object Main extends IOApp {
@@ -53,11 +55,13 @@ object Main extends IOApp {
                         storages <- Storages.make[IO](cfg).asResource
                         services <- Services.make[IO](cfg, nodeId, keyPair, storages, queues).asResource
                         programs <- Programs.make[IO](storages, services, p2pClient, nodeId).asResource
-
-                        rumorHandler = RumorHandlers.make[IO](storages.cluster).handlers
+                        csvExample = new CSVExample(kryoPool, keyPair, securityProvider)
+                        handler = CSVHandler.csvHandler(csvExample, services.gossip) <+> CSVHandler
+                          .csvSignatureHandler(csvExample)
+                        rumorHandler = RumorHandlers.make[IO](storages.cluster, handler).handlers
                         _ <- Daemons.start(storages, services, queues, p2pClient, rumorHandler, nodeId, cfg).asResource
 
-                        api = HttpApi.make[IO](storages, queues, services, programs, cfg.environment)
+                        api = HttpApi.make[IO](storages, queues, services, programs, cfg.environment, csvExample)
                         _ <- MkHttpServer[IO].newEmber(ServerName("public"), cfg.httpConfig.publicHttp, api.publicApp)
                         _ <- MkHttpServer[IO].newEmber(ServerName("p2p"), cfg.httpConfig.p2pHttp, api.p2pApp)
                         _ <- MkHttpServer[IO].newEmber(ServerName("cli"), cfg.httpConfig.cliHttp, api.cliApp)

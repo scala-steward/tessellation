@@ -12,6 +12,7 @@ import org.tesselation.kryo.KryoSerializer
 import org.http4s.implicits.http4sKleisliResponseSyntaxOptionT
 import org.http4s.server.middleware.{RequestLogger, ResponseLogger}
 import org.http4s.{HttpApp, HttpRoutes}
+import org.tessellation.csv.{CSVExample, CSVExampleRoutes}
 
 object HttpApi {
 
@@ -20,9 +21,10 @@ object HttpApi {
     queues: Queues[F],
     services: Services[F],
     programs: Programs[F],
-    environment: AppEnvironment
+    environment: AppEnvironment,
+    csvExample: CSVExample[F]
   ): HttpApi[F] =
-    new HttpApi[F](storages, queues, services, programs, environment) {}
+    new HttpApi[F](storages, queues, services, programs, environment, csvExample) {}
 }
 
 sealed abstract class HttpApi[F[_]: Async: KryoSerializer] private (
@@ -30,7 +32,8 @@ sealed abstract class HttpApi[F[_]: Async: KryoSerializer] private (
   queues: Queues[F],
   services: Services[F],
   programs: Programs[F],
-  environment: AppEnvironment
+  environment: AppEnvironment,
+  csvExample: CSVExample[F]
 ) {
   private val healthRoutes = HealthRoutes[F](services.healthcheck).routes
   private val clusterRoutes =
@@ -39,11 +42,12 @@ sealed abstract class HttpApi[F[_]: Async: KryoSerializer] private (
   private val gossipRoutes = routes.GossipRoutes[F](storages.rumor, queues.rumor, services.gossip)
 
   private val debugRoutes = DebugRoutes[F](storages, services).routes
+  private val csvRoutes = CSVExampleRoutes[F](services.gossip, csvExample).cliRoutes
 
   private val metricRoutes = MetricRoutes[F](services).routes
 
   private val openRoutes: HttpRoutes[F] =
-    (if (environment == Testnet) debugRoutes else HttpRoutes.empty) <+>
+    (if (environment == Testnet) (debugRoutes <+> csvRoutes) else HttpRoutes.empty) <+>
       healthRoutes <+> metricRoutes
 
   private val p2pRoutes: HttpRoutes[F] =

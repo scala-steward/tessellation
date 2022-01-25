@@ -13,18 +13,21 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object RumorHandlers {
 
-  def make[F[_]: Async: KryoSerializer](clusterStorage: ClusterStorage[F]): RumorHandlers[F] =
-    new RumorHandlers[F](clusterStorage) {}
+  def make[F[_]: Async: KryoSerializer](clusterStorage: ClusterStorage[F], handler: RumorHandler[F]): RumorHandlers[F] =
+    new RumorHandlers[F](clusterStorage, handler) {}
 }
 
-sealed abstract class RumorHandlers[F[_]: Async: KryoSerializer] private (clusterStorage: ClusterStorage[F]) {
+sealed abstract class RumorHandlers[F[_]: Async: KryoSerializer] private (
+  clusterStorage: ClusterStorage[F],
+  handler: RumorHandler[F]
+) {
   private val nodeState = nodeStateHandler(clusterStorage)
 
   private val debug: RumorHandler[F] = {
     val logger = Slf4jLogger.getLogger[F]
 
     val strHandler = RumorHandler.fromFn[F, String] { s =>
-      logger.info(s"String rumor received $s")
+      logger.info(s"Test String rumor received $s")
     }
 
     val optIntHandler = RumorHandler.fromBiFn[F, Option[Int]] { (peerId, optInt) =>
@@ -38,5 +41,5 @@ sealed abstract class RumorHandlers[F[_]: Async: KryoSerializer] private (cluste
     strHandler <+> optIntHandler
   }
 
-  val handlers: RumorHandler[F] = nodeState <+> debug
+  val handlers: RumorHandler[F] = nodeState <+> debug <+> handler
 }

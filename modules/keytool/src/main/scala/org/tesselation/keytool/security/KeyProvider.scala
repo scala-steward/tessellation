@@ -31,7 +31,7 @@ object KeyProvider {
   val ECDSA = "ECDsA"
   val secp256k = "secp256k1"
 
-  private def getKeyPairGenerator[F[_]: Async: SecurityProvider]: F[KeyPairGenerator] =
+  def getKeyPairGenerator[F[_]: Async: SecurityProvider]: F[KeyPairGenerator] =
     for {
       ecSpec <- Async[F].delay { new ECGenParameterSpec(secp256k) }
       bcProvider = SecurityProvider[F].provider
