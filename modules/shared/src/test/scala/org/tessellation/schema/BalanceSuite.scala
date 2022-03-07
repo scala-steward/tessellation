@@ -22,12 +22,12 @@ object BalanceSuite extends FunSuite with Checkers {
     val balance = Balance(NonNegLong(Long.MaxValue))
     val amount = Amount(NonNegLong(2L))
 
-    verify(balance.plus(amount).isLeft)
+    not(exists(balance.plus(amount))(_ => success))
   }
 
   test("minus should subtract given amount from balance") {
     val balance = Balance(NonNegLong(30L))
-    val amount = Amount(NonNegLong(1L))
+    val amount = Balance(NonNegLong(1L))
 
     val expected = Balance(NonNegLong(29L))
 
@@ -36,8 +36,8 @@ object BalanceSuite extends FunSuite with Checkers {
 
   test("minus returns Left when amount lowers balance below zero") {
     val balance = Balance(NonNegLong(1L))
-    val amount = Amount(NonNegLong(30L))
+    val amount = Balance(NonNegLong(30L))
 
-    verify(balance.minus(amount).isLeft)
+    not(exists(balance.minus(amount))(_ => success))
   }
 }

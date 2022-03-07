@@ -58,17 +58,13 @@ object BlockService {
         } yield ()
 
       private def prepareBalances(transactions: Set[Transaction]): F[Map[Address, Balance]] = {
-        val sources = transactions.groupBy(_.source)
-        val destinations = transactions.groupBy(_.destination)
+        val sources = transactions.groupBy(_.source).keySet
+        val destinations = transactions.groupBy(_.destination).keySet
 
         val addresses = sources ++ destinations
 
-        def applyTransactions(
-          balance: Balance,
-          address: Address,
-          txs: Set[Transaction]
-        ): Either[BalanceOutOfRange, Balance] =
-          txs.foldLeft(balance.asRight[BalanceOutOfRange]) { (acc, tx) =>
+        def applyTransactions(balance: Balance, address: Address): Either[BalanceOutOfRange, Balance] =
+          transactions.foldLeft(balance.asRight[BalanceOutOfRange]) { (acc, tx) =>
             tx match {
               case Transaction(`address`, _, amount, fee, _, _) => acc.flatMap(_.minus(amount)).flatMap(_.minus(fee))
               case Transaction(_, `address`, amount, _, _, _)   => acc.flatMap(_.plus(amount))
@@ -76,14 +72,13 @@ object BlockService {
             }
           }
 
-        addresses.toList.traverse {
-          case (address, txs) =>
-            addressStorage
-              .getBalance(address)
-              .flatMap { balance =>
-                applyTransactions(balance, address, txs).liftTo[F]
-              }
-              .map((address, _))
+        addresses.toList.traverse { address =>
+          addressStorage
+            .getBalance(address)
+            .flatMap { balance =>
+              applyTransactions(balance, address).liftTo[F]
+            }
+            .map((address, _))
         }.map(_.toMap)
       }
       private def acceptTransactions(hashedTransactions: Set[Hashed[Transaction]]): F[Unit] =

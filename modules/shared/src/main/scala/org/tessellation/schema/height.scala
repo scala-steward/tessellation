@@ -36,9 +36,11 @@ object height {
   object SubHeight {
     val MinValue: SubHeight = SubHeight(NonNegLong.MinValue)
 
+    implicit val order: Order[SubHeight] = Order[Long].contramap(_.value.value)
+
     implicit val next: Next[SubHeight] = new Next[SubHeight] {
       def next(a: SubHeight): SubHeight = SubHeight(a.value |+| NonNegLong(1L))
-      def partialOrder: PartialOrder[SubHeight] = Order[Long].contramap(_.value.value)
+      def partialOrder: PartialOrder[SubHeight] = order
     }
   }
 
