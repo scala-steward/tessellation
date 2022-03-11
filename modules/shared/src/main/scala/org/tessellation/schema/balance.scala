@@ -1,10 +1,19 @@
 package org.tessellation.schema
 
+import cats.Applicative
+import cats.effect.MonadCancelThrow
 import cats.kernel.Order
 import cats.syntax.either._
+import cats.syntax.flatMap._
+import cats.syntax.functor._
 import cats.syntax.semigroup._
+import cats.syntax.traverse._
 
 import scala.util.Try
+
+import org.tessellation.schema
+import org.tessellation.schema.address.Address
+import org.tessellation.schema.transaction.Transaction
 
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
@@ -56,6 +65,35 @@ object balance {
           case Right(b) => Balance(b)
         }
     )
+
+    def applyTransactions[F[_]: Applicative: MonadCancelThrow](
+      transactions: Set[Transaction],
+      getBalanceFn: Address => F[Balance]
+    ): F[Map[Address, Balance]] = {
+      val sources = transactions.groupBy(_.source).keySet
+      val destinations = transactions.groupBy(_.destination).keySet
+      val addresses = sources ++ destinations
+
+      // Note: It iterates over transaction list for each balance. Can be optimised.
+      def applyTransactions(
+        balance: Balance,
+        address: schema.address.Address
+      ) =
+        transactions.foldLeft(balance.asRight[schema.balance.BalanceOutOfRange]) { (acc, tx) =>
+          tx match {
+            case Transaction(`address`, _, amount, fee, _, _) =>
+              acc.flatMap(_.minus(amount)).flatMap(_.minus(fee))
+            case Transaction(_, `address`, amount, _, _, _) => acc.flatMap(_.plus(amount))
+            case _                                          => acc
+          }
+        }
+
+      addresses.toList.traverse { address =>
+        getBalanceFn(address).flatMap { balance =>
+          applyTransactions(balance, address).liftTo[F]
+        }.map((address, _))
+      }.map(_.toMap)
+    }
 
   }
 

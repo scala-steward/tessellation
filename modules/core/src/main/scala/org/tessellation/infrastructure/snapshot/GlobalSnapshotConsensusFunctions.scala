@@ -1,7 +1,8 @@
 package org.tessellation.infrastructure.snapshot
 
 import cats.data.NonEmptyList
-import cats.effect.Async
+import cats.effect.{Async, MonadCancelThrow}
+import cats.syntax.applicative._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.functorFilter._
@@ -11,19 +12,24 @@ import cats.syntax.order._
 import cats.syntax.traverse._
 import cats.{Applicative, Eval}
 
-import org.tessellation.dag.snapshot.{GlobalSnapshot, GlobalSnapshotInfo, StateChannelSnapshotBinary}
+import org.tessellation.dag.domain.block.DAGBlock
+import org.tessellation.dag.snapshot._
 import org.tessellation.domain.snapshot.{GlobalSnapshotStorage, TimeSnapshotTrigger, TipSnapshotTrigger}
 import org.tessellation.ext.cats.syntax.next._
 import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
+import org.tessellation.schema.balance.Balance
 import org.tessellation.schema.height.SubHeight
 import org.tessellation.schema.peer.PeerId
+import org.tessellation.schema.transaction.{Transaction, TransactionReference}
 import org.tessellation.sdk.domain.consensus.ConsensusFunctions
+import org.tessellation.security.SecurityProvider
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.signature.Signed
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import shapeless.Typeable
@@ -33,7 +39,7 @@ trait GlobalSnapshotConsensusFunctions[F[_]]
 
 object GlobalSnapshotConsensusFunctions {
 
-  def make[F[_]: Async: KryoSerializer](
+  def make[F[_]: Async: KryoSerializer: MonadCancelThrow: SecurityProvider](
     globalSnapshotStorage: GlobalSnapshotStorage[F],
     heightInterval: NonNegLong
   ): GlobalSnapshotConsensusFunctions[F] = new GlobalSnapshotConsensusFunctions[F] {
@@ -61,17 +67,20 @@ object GlobalSnapshotConsensusFunctions {
       val (_, lastGS) = last
 
       val scEvents = events.toList.mapFilter(_.swap.toOption)
-      val dagEvents = events.toList.mapFilter(_.toOption)
+      val dagEvents: Seq[DAGEvent] = events.toList.mapFilter(_.toOption)
 
       val heightLimit = lastGS.height.nextN(heightInterval)
 
-      val blocksInRange =
+      val blocksInRange: Set[Signed[DAGBlock]] =
         dagEvents
-          .mapFilter(_.swap.toOption)
+          .mapFilter[Signed[DAGBlock]](_.swap.toOption)
           .filter { signedBlock =>
             signedBlock.value.height <= heightLimit && signedBlock.value.height > lastGS.height
           }
           .toSet
+
+      // Note: Shouldn't it be NonEmptySet?
+      val transactionsInRange: Set[Signed[Transaction]] = blocksInRange.flatMap(_.transactions)
 
       val tipTriggersEvents = dagEvents.mapFilter(_.toOption).mapFilter(tipSnapshotTriggerTypable.cast)
 
@@ -91,13 +100,37 @@ object GlobalSnapshotConsensusFunctions {
         ordinal = lastGS.ordinal.next
         maybeTipTrigger = tipTriggersEvents.find(_.height === heightLimit)
 
+        lastTxRefs <- transactionsInRange
+          .groupBy(_.source)
+          .toList
+          .traverse {
+            case (address, txs) =>
+              TransactionReference.of(txs.maxBy(_.ordinal)).map((address, _))
+          }
+          .map(_.toMap)
+
+        addressInfoUpdate <- Balance
+          .applyTransactions(
+            transactionsInRange.map(_.value),
+            address => lastGS.addressInfo.get(address).map(_.balance).getOrElse(Balance.empty).pure[F]
+          )
+          .map(_.map { case (address, balance) => (address, AddressInfo(balance, lastTxRefs(address))) }.toMap)
+
+        addressInfo = (addressInfoUpdate.keySet ++ lastGS.addressInfo.keys).map { address =>
+          (lastGS.addressInfo.get(address), addressInfoUpdate.get(address)) match {
+            case (_, Some(update)) => (address, update)
+            case (Some(old), None) => (address, old)
+            case (None, None)      => (address, AddressInfo.empty)
+          }
+        }.toMap
+
         globalSnapshot = GlobalSnapshot(
           ordinal,
           maybeTipTrigger.fold(lastGS.height)(_.height),
           maybeTipTrigger.fold(lastGS.subHeight.next)(_ => SubHeight.MinValue),
           lastGSHash,
           blocksInRange,
-          lastGS.balances, // TODO
+          addressInfo,
           scSnapshots,
           NonEmptyList.of(PeerId(Hex("peer1"))), // TODO
           GlobalSnapshotInfo(lastGS.info.lastStateChannelSnapshotHashes ++ sCSnapshotHashes)
