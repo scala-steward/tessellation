@@ -7,6 +7,8 @@ ThisBuild / organizationName := "tessellation"
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports
 
+ThisBuild  / envFileName := ".sbtenv"
+
 resolvers += Resolver.sonatypeRepo("snapshots")
 
 val scalafixCommonSettings = inConfig(IntegrationTest)(scalafixConfigSettings(IntegrationTest))
@@ -53,7 +55,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "tessellation"
   )
-  .aggregate(keytool, kernel, shared, core, testShared, wallet, dagShared, sdk, dagL1)
+  .aggregate(keytool, kernel, shared, core, testShared, wallet, dagShared, sdk, dagL1, e2e)
 
 lazy val kernel = (project in file("modules/kernel"))
   .enablePlugins(AshScriptPlugin)
@@ -269,6 +271,23 @@ lazy val dagShared = (project in file("modules/dag-shared"))
   .dependsOn(shared % "compile->compile;test->test", testShared % Test, keytool % Test)
   .settings(
     name := "tessellation-dag-shared",
+    Defaults.itSettings,
+    scalafixCommonSettings,
+    commonSettings,
+    commonTestSettings,
+    makeBatScripts := Seq(),
+    libraryDependencies := Seq(
+      CompilerPlugin.kindProjector,
+      CompilerPlugin.betterMonadicFor,
+      CompilerPlugin.semanticDB,
+      Libraries.logback % Runtime
+    )
+  )
+
+lazy val e2e = (project in file("modules/e2e"))
+  .dependsOn(shared % "compile->compile;test->test", testShared % Test, keytool % Test, sdk % Test, wallet % Test)
+  .settings(
+    name := "tessellation-e2e",
     Defaults.itSettings,
     scalafixCommonSettings,
     commonSettings,
