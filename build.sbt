@@ -1,4 +1,4 @@
-import Dependencies._
+import Dependencies.{Libraries, _}
 
 ThisBuild / scalaVersion := "2.13.8"
 ThisBuild / organization := "org.constellation"
@@ -6,8 +6,6 @@ ThisBuild / organizationName := "tessellation"
 
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports
-
-ThisBuild  / envFileName := ".sbtenv"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -55,7 +53,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "tessellation"
   )
-  .aggregate(keytool, kernel, shared, core, testShared, wallet, dagShared, sdk, dagL1, e2e)
+  .aggregate(keytool, kernel, shared, core, testShared, wallet, dagShared, sdk, dagL1, e2e, rosetta)
 
 lazy val kernel = (project in file("modules/kernel"))
   .enablePlugins(AshScriptPlugin)
@@ -298,6 +296,42 @@ lazy val e2e = (project in file("modules/e2e"))
       CompilerPlugin.betterMonadicFor,
       CompilerPlugin.semanticDB,
       Libraries.logback % Runtime
+    )
+  )
+
+lazy val circeVersion         = "0.11.0"
+lazy val finagleVersion       = "6.45.0"
+lazy val finchVersion         = "0.15.1"
+lazy val scalaTestVersion     = "3.0.0"
+
+lazy val rosetta = (project in file("modules/rosetta"))
+  .enablePlugins(JavaAppPackaging)
+  .dependsOn(shared % "compile->compile;test->test",
+    testShared % Test, keytool, sdk, wallet, dagShared)
+  .settings(
+    name := "tessellation-rosetta",
+    Defaults.itSettings,
+    scalafixCommonSettings,
+    commonSettings,
+    commonTestSettings,
+    makeBatScripts := Seq(),
+    libraryDependencies := Seq(
+      CompilerPlugin.kindProjector,
+      CompilerPlugin.betterMonadicFor,
+      CompilerPlugin.semanticDB,
+      Libraries.logback % Runtime,
+      Libraries.circeCore,
+      Libraries.circeGeneric,
+      Libraries.circeParser,
+      Libraries.circeRefined,
+      Libraries.circeShapes,
+      Libraries.circeDerivation,
+      "io.circe" %% "circe-generic-extras" % "0.14.1",
+      Libraries.http4sDsl,
+      Libraries.http4sServer,
+      Libraries.http4sClient,
+      Libraries.http4sCirce,
+      Libraries.http4sJwtAuth,
     )
   )
 
