@@ -14,5 +14,5 @@ package org.tessellation.rosetta.server.model
 case class PublicKey(
   /* Hex-encoded public key bytes in the format specified by the CurveType. */
   hexBytes: String,
-  curveType: CurveType
+  curveType: String
 )

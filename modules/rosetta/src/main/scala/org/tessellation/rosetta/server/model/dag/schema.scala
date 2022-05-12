@@ -24,6 +24,7 @@ object schema {
   sealed trait ChainObjectStatus
 
   object ChainObjectStatus {
+    case object Unknown extends ChainObjectStatus
     case object Pending extends ChainObjectStatus
     case object Accepted extends ChainObjectStatus
     implicit val jsonEncoder: Encoder[ChainObjectStatus] =
@@ -82,13 +83,19 @@ object schema {
   case class ConstructionMetadataRequestOptions()
 
   case class ConstructionMetadataResponseMetadata(
-    accountSequence: Int,
-    recentBlockHash: String
+    lastTransactionHashReference: String,
+    lastTransactionOrdinalReference: Long
   )
 
   case class ConstructionParseResponseMetadata()
 
-  case class ConstructionPayloadsRequestMetadata()
+  case class ConstructionPayloadsRequestMetadata(
+                                                  srcAddress: String,
+                                                  lastTransactionHashReference: String,
+                                                  lastTransactionOrdinalReference: Long,
+                                                  fee: Long,
+                                                  salt: Option[Long]
+                                                )
 
   case class ConstructionPreprocessRequestMetadata()
 

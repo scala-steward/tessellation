@@ -17,5 +17,5 @@ case class SigningPayload(
   accountIdentifier: Option[AccountIdentifier],
   /* Hex-encoded string of the payload bytes. */
   hexBytes: String,
-  signatureType: Option[SignatureType]
+  signatureType: Option[String]
 )
