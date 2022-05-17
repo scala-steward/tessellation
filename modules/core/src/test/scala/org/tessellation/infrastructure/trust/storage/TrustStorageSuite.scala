@@ -9,6 +9,7 @@ import org.tessellation.schema.trust.{InternalTrustUpdate, InternalTrustUpdateBa
 import weaver.SimpleIOSuite
 import weaver.scalacheck.Checkers
 
+// extend FunSuite
 object TrustStorageSuite extends SimpleIOSuite with Checkers {
 
   test("trust update is applied") {

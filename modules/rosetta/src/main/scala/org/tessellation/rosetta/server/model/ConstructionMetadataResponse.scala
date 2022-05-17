@@ -10,9 +10,9 @@
   */
 
 package org.tessellation.rosetta.server.model
-import org.tessellation.rosetta.server.model.dag.schema.ConstructionMetadataResponseMetadata
+import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata
 
 case class ConstructionMetadataResponse(
-  metadata: ConstructionMetadataResponseMetadata,
+  metadata: ConstructionPayloadsRequestMetadata,
   suggestedFee: Option[List[Amount]]
 )

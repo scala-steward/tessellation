@@ -15,5 +15,5 @@ case class BlockEvent(
   /* sequence is the unique identifier of a BlockEvent within the context of a NetworkIdentifier. */
   sequence: Long,
   blockIdentifier: BlockIdentifier,
-  `type`: BlockEventType
+  `type`: String //BlockEventType
 )

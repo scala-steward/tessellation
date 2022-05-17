@@ -90,12 +90,12 @@ object schema {
   case class ConstructionParseResponseMetadata()
 
   case class ConstructionPayloadsRequestMetadata(
-                                                  srcAddress: String,
-                                                  lastTransactionHashReference: String,
-                                                  lastTransactionOrdinalReference: Long,
-                                                  fee: Long,
-                                                  salt: Option[Long]
-                                                )
+    srcAddress: String,
+    lastTransactionHashReference: String,
+    lastTransactionOrdinalReference: Long,
+    fee: Long,
+    salt: Option[Long]
+  )
 
   case class ConstructionPreprocessRequestMetadata()
 

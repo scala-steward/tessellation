@@ -1,18 +1,20 @@
 package org.tessellation.e2e
 
+import java.security.KeyPair
+
 import cats.effect.unsafe.implicits.global
 import cats.effect.{Async, IO, Resource}
-import ciris.Secret
-import fs2.io.file.{Files, Path}
-import fs2.text
+
 import org.tessellation.cli.env.{KeyAlias, Password, StorePath}
 import org.tessellation.keytool.KeyStoreUtils
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.security.SecurityProvider
+
+import ciris.Secret
+import fs2.io.file.{Files, Path}
+import fs2.text
 import weaver.IOSuite
 import weaver.scalacheck.Checkers
-
-import java.security.KeyPair
 
 object E2ETestSuite extends IOSuite with Checkers {
 

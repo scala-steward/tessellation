@@ -28,6 +28,6 @@ case class Allow(
   balanceExemptions: List[BalanceExemption],
   /* Any Rosetta implementation that can update an AccountIdentifier's unspent coins based on the contents of the mempool should populate this field as true. If false, requests to `/account/coins` that set `include_mempool` as true will be automatically rejected. */
   mempoolCoins: Boolean,
-  blockHashCase: Option[ModelCase],
-  transactionHashCase: Option[ModelCase]
+  blockHashCase: Option[String],
+  transactionHashCase: Option[String]
 )

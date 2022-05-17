@@ -326,7 +326,6 @@ lazy val rosetta = (project in file("modules/rosetta"))
       Libraries.circeRefined,
       Libraries.circeShapes,
       Libraries.circeDerivation,
-      "io.circe" %% "circe-generic-extras" % "0.14.1",
       Libraries.http4sDsl,
       Libraries.http4sServer,
       Libraries.http4sClient,
