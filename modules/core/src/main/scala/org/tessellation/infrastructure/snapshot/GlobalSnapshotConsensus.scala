@@ -9,6 +9,7 @@ import cats.syntax.option._
 import org.tessellation.config.types.SnapshotConfig
 import org.tessellation.dag.block.BlockValidator
 import org.tessellation.dag.block.processing.BlockAcceptanceManager
+import org.tessellation.domain.rewards.Rewards
 import org.tessellation.domain.snapshot.GlobalSnapshotStorage
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.peer.PeerId
@@ -35,18 +36,20 @@ object GlobalSnapshotConsensus {
     healthCheckConfig: HealthCheckConfig,
     snapshotConfig: SnapshotConfig,
     client: Client[F],
-    session: Session[F]
+    session: Session[F],
+    rewards: Rewards[F]
   ): F[Consensus[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact]] =
     Consensus.make[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact](
       GlobalSnapshotConsensusFunctions.make[F](
         globalSnapshotStorage,
         snapshotConfig.heightInterval,
-        BlockAcceptanceManager.make[F](blockValidator)
+        BlockAcceptanceManager.make[F](blockValidator),
+        rewards
       ),
       gossip,
       selfId,
       keyPair,
-      snapshotConfig.fallbackTriggerTimeout,
+      snapshotConfig.timeTriggerInterval,
       whitelisting,
       clusterStorage,
       healthCheckConfig,

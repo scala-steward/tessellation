@@ -16,6 +16,7 @@ import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types._
 
 import com.monovore.decline.Opts
+import eu.timepit.refined.auto._
 import fs2.io.file.Path
 
 object method {
@@ -47,7 +48,8 @@ object method {
       ),
       healthCheck = healthCheckConfig,
       snapshot = snapshotConfig,
-      collateral = collateralConfig(environment, collateralAmount)
+      collateral = collateralConfig(environment, collateralAmount),
+      rewards = RewardsConfig.default
     )
 
     val stateAfterJoining: NodeState = NodeState.WaitingForDownload
