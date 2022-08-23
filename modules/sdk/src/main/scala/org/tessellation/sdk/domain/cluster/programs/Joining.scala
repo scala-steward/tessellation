@@ -1,8 +1,8 @@
 package org.tessellation.sdk.domain.cluster.programs
 
 import cats.Applicative
-import cats.effect.Async
 import cats.effect.std.Queue
+import cats.effect.{Async, Temporal}
 import cats.syntax.applicative._
 import cats.syntax.applicativeError._
 import cats.syntax.eq._
@@ -29,6 +29,7 @@ import org.tessellation.security.SecurityProvider
 import org.tessellation.security.signature.Signed
 
 import com.comcast.ip4s.{Host, IpLiteralSyntax, Port}
+import fs2.concurrent.SignallingRef
 import fs2.{Pipe, Stream}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -45,7 +46,8 @@ object Joining {
     seedlist: Option[Set[PeerId]],
     selfId: PeerId,
     stateAfterJoining: NodeState,
-    peerDiscovery: PeerDiscovery[F]
+    peerDiscovery: PeerDiscovery[F],
+    restartSignal: SignallingRef[F, Unit]
   ): F[Joining[F]] =
     Queue
       .unbounded[F, P2PContext]
@@ -62,7 +64,8 @@ object Joining {
           seedlist,
           selfId,
           stateAfterJoining,
-          peerDiscovery
+          peerDiscovery,
+          restartSignal
         )
       )
 
@@ -78,7 +81,8 @@ object Joining {
     seedlist: Option[Set[PeerId]],
     selfId: PeerId,
     stateAfterJoining: NodeState,
-    peerDiscovery: PeerDiscovery[F]
+    peerDiscovery: PeerDiscovery[F],
+    restartSignal: SignallingRef[F, Unit]
   ): F[Joining[F]] = {
 
     val logger = Slf4jLogger.getLogger[F]
@@ -94,7 +98,8 @@ object Joining {
       seedlist,
       selfId,
       stateAfterJoining,
-      joiningQueue
+      joiningQueue,
+      restartSignal
     ) {}
 
     def join: Pipe[F, P2PContext, Unit] =
@@ -127,7 +132,8 @@ sealed abstract class Joining[F[_]: Async: GenUUID: SecurityProvider: KryoSerial
   seedlist: Option[Set[PeerId]],
   selfId: PeerId,
   stateAfterJoining: NodeState,
-  joiningQueue: Queue[F, P2PContext]
+  joiningQueue: Queue[F, P2PContext],
+  restartSignal: SignallingRef[F, Unit]
 ) {
 
   def join(toPeer: PeerToJoin): F[Unit] =
@@ -210,7 +216,12 @@ sealed abstract class Joining[F[_]: Async: GenUUID: SecurityProvider: KryoSerial
             .flatMap(signClient.joinRequest(_).run(withPeer))
             .ifM(
               Applicative[F].unit,
-              new Throwable(s"Unexpected error occured when joining with peer=${withPeer.id}.").raiseError[F, Unit]
+              nodeStorage.getNodeState
+                .map(_ == NodeState.SessionStarted)
+                .ifM(
+                  Temporal[F].start(restartSignal.set(())).void,
+                  new Throwable(s"Unexpected error occured when joining with peer=${withPeer.id}.").raiseError[F, Unit]
+                )
             )
         }
 
@@ -225,8 +236,7 @@ sealed abstract class Joining[F[_]: Async: GenUUID: SecurityProvider: KryoSerial
 
       _ <- clusterStorage.addPeer(peer)
 
-      // Note: Changing state from SessionStarted to Ready state will execute once for first peer, then all consecutive joins should be ignored
-      _ <- nodeStorage.tryModifyState(NodeState.SessionStarted, stateAfterJoining).handleError(_ => ())
+      _ <- nodeStorage.tryModifyState(Set(NodeState.SessionStarted, stateAfterJoining), stateAfterJoining)
     } yield peer
 
   private def validateSeedlist(peer: PeerToJoin): F[Unit] =

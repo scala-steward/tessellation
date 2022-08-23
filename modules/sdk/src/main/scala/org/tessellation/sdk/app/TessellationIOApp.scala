@@ -104,7 +104,7 @@ abstract class TessellationIOApp[A <: CliMethod](
                           .asResource
 
                         programs <- SdkPrograms
-                          .make[IO](cfg, storages, services, p2pClient.cluster, p2pClient.sign, _seedlist, selfId)
+                          .make[IO](cfg, storages, services, p2pClient.cluster, p2pClient.sign, _seedlist, selfId, _restartSignal)
                           .asResource
 
                         sdk = new SDK[IO] {
