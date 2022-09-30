@@ -37,24 +37,13 @@ import org.bouncycastle.jce.spec.ECPrivateKeySpec
 
 import examples.{proofs, sampleHash}
 import Transaction._
-/*
-key 0:
-public hex: bb2c6883916fc5fd703a69dbb8685cb3db1f6cbef131afe9e8fbd72faf7f6129e068f1ea48f2e4dd9f1297a5ce0acfe7b570b7a22a3452ef182f2533188270e6
-private hex: d27337b4cf6b2badacead599ed7e4fa0a6436e0254631c91df0b28b69e9e4996
-address: DAG3k3VihUWMjse9LE93jRqZLEuwGd6a5Ypk4zYS
-
-key 1:
-public hex: c0cec83ddd60b3acbba15384c0774575e5003365dd8278c825b4ad8f9cd3272d5931dfea11e9f33bb3f57eb0840e455e31f31425b2b964b9b90ca7169d72e0c0
-private hex: 373806942290579f36dc3bf553ab46b22ef388ce7c33a1a8d8350294c4aef6ca
-address: DAG3JxRL8KuYAcdc58o4JdGAmNjJCN5woNFDsWEA
- */
 
 class MockupData() {
 
   val genesis: GlobalSnapshot = mkGenesis(
     SortedMap(
-      // DAG3k3VihUWMjse9LE93jRqZLEuwGd6a5Ypk4zYS ) has balance (0), less than the minimum balance (10000000000000000)
       Address("DAG3k3VihUWMjse9LE93jRqZLEuwGd6a5Ypk4zYS") -> Balance(NonNegLong(1000000000000000000L)),
+      Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd") -> Balance(NonNegLong(1000000000000000000L)),
       Address("DAG3JxRL8KuYAcdc58o4JdGAmNjJCN5woNFDsWEA") -> Balance(NonNegLong(1000000000000000000L)),
       Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQefgh") -> Balance(NonNegLong(1000000000000000000L))
     )
@@ -119,7 +108,9 @@ address: DAG3k3VihUWMjse9LE93jRqZLEuwGd6a5Ypk4zYS
 
   import Height._
 
-  def acceptTransactionIncrementBlock[F[_]: KryoSerializer](newTransaction: Signed[Transaction]): Either[String, Unit] =
+  def acceptTransactionIncrementBlock[F[_]: KryoSerializer](
+    newTransaction: Signed[Transaction]
+  ): Either[String, Unit] =
     currentBlock.hash.left.map(_.getMessage).flatMap { cbHash =>
       currentBlockHash = cbHash
       val newHeight = height.next
@@ -201,10 +192,6 @@ object MockData {
 }
 
 object examples {
-
-//  import SignatureProof._
-//  import Signed._
-
   // workaround to deal with ambiguous implicits
   val spOrder = Order.fromOrdering(SignatureProof.OrderingInstance)
 
