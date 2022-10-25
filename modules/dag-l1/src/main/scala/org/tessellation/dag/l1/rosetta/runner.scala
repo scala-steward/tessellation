@@ -107,11 +107,13 @@ object Rosetta {
 //      .left.map(e => makeErrorCodeMsg(0, e.getMessage))
       value1.map { pk =>
         s.signatureType match {
-          case "ecdsa" =>
+          case "ecdsa" => {
+            println(s"+++ Here and signature type ${s.signatureType == "ecdsa"} +++")
             Right({
               // TODO, validate curve type.
               SignatureProof(pk.toId, org.tessellation.security.signature.signature.Signature(Hex(s.hexBytes)))
             })
+          }
           case x => Left(makeErrorCodeMsg(10, s"${x} not supported"))
         }
       }

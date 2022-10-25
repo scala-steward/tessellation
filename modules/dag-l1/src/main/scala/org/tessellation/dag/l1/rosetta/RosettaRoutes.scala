@@ -245,20 +245,20 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
             errorMsg(3, "No signatures found")
           } else {
             KryoSerializer[F]
-              .deserialize[DAGTransaction](
+              .deserialize[Signed[DAGTransaction]](
                 Hex(constructionCombineRequest.unsignedTransaction).toBytes // TODO: Handle error here for invalid hex
               )
               .left
               .map(_ => error(9))
-              .map { t: DAGTransaction =>
-                Rosetta.convertSignature(constructionCombineRequest.signatures).flatMap {
+              .map { t: Signed[DAGTransaction] =>
+                val test = Rosetta.convertSignature(constructionCombineRequest.signatures).flatMap {
                   _.left
                     .map(InternalServerError(_))
                     .map { prf =>
                       val serializedTransaction = KryoSerializer[F]
                         .serialize(
                           Signed[DAGTransaction](
-                            t,
+                            t.value,
                             NonEmptySet(prf.head, SortedSet(prf.tail: _*))(
                               Order.fromOrdering(SignatureProof.OrderingInstance)
                             )
@@ -272,6 +272,8 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                     }
                     .merge
                 }
+
+                test
               }
               .merge
           }
@@ -285,12 +287,15 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
         val endpointResponse = for {
           _ <- validateNetwork(constructionDeriveRequest.networkIdentifier)
         } yield {
-          convertRosettaPublicKeyToJPublicKey(constructionDeriveRequest.publicKey).map { inner =>
+          val test = convertRosettaPublicKeyToJPublicKey(constructionDeriveRequest.publicKey).map { inner =>
             inner.flatMap { pk =>
               val value = pk.toAddress.value.value
               Ok(ConstructionDeriveResponse(Some(value), Some(AccountIdentifier(value, None, None)), None))
             }
-          }.merge
+          }
+
+          val mergedTest = test.merge
+          mergedTest
         }
 
         endpointResponse.merge
