@@ -205,7 +205,7 @@
         "header": [],
         "body": {
           "mode": "raw",
-          "raw": "{\n    \"network_identifier\": {\n        \"blockchain\": \"dag\",\n        \"network\": \"mainnet\"\n    },\n    \"unsigned_transaction\": \"88030270726f6f66f376616c75e5167b018903af020269e47369676e61747572e50303826105000303826101000047c90208616d6f756ef46269746d617024696e697424b064657374696e6174696fee6665e56f7264696e61ec706172656ef473616cf4736f757263e50bcc020176616c75e5020914020100030001012e002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251656667e8020100070005cc02020906020100070005cc020209060201001a0018cb0202686173e86f7264696e61ec0903736f6d65486173e808070005cc020209040302010002010005000309a4132e002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251616263e4020100010000\",\n    \"signatures\": [\n        {\n            \"signing_payload\": {\n                \"address\": \"string\",\n                \"account_identifier\": {\n                    \"address\": \"0x3a065000ab4183c6bf581dc1e55a605455fc6d61\",\n                    \"sub_account\": {\n                        \"address\": \"0x6b175474e89094c44da98b954eedeac495271d0f\",\n                        \"metadata\": {}\n                    },\n                    \"metadata\": {}\n                },\n                \"hex_bytes\": \"string\",\n                \"signature_type\": \"ecdsa\"\n            },\n            \"public_key\": {\n                \"hex_bytes\": \"bb2c6883916fc5fd703a69dbb8685cb3db1f6cbef131afe9e8fbd72faf7f6129e068f1ea48f2e4dd9f1297a5ce0acfe7b570b7a22a3452ef182f2533188270e6\",\n                \"curve_type\": \"secp256k1\"\n            },\n            \"signature_type\": \"ecdsa\",\n            \"hex_bytes\": \"string\"\n        }\n    ]\n}",
+          "raw": "{\n    \"network_identifier\": {\n        \"blockchain\": \"dag\",\n        \"network\": \"mainnet\"\n    },\n    \"unsigned_transaction\": \"c90208616d6f756ef46269746d617024696e697424b064657374696e6174696fee6665e56f7264696e61ec706172656ef473616cf4736f757263e50bcc020176616c75e50209140100000101002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251656667e801000005cc0202090601000005cc0202090601000018cb0202686173e86f7264696e61ec0903736f6d65486173e8070005cc020209040201000100000309a413002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251616263e4010000\",\n    \"signatures\": [\n        {\n            \"signing_payload\": {\n                \"address\": \"string\",\n                \"account_identifier\": {\n                    \"address\": \"0x3a065000ab4183c6bf581dc1e55a605455fc6d61\",\n                    \"sub_account\": {\n                        \"address\": \"0x6b175474e89094c44da98b954eedeac495271d0f\",\n                        \"metadata\": {}\n                    },\n                    \"metadata\": {}\n                },\n                \"hex_bytes\": \"string\",\n                \"signature_type\": \"ecdsa\"\n            },\n            \"public_key\": {\n                \"hex_bytes\": \"02c0cec83ddd60b3acbba15384c0774575e5003365dd8278c825b4ad8f9cd3272d\",\n                \"curve_type\": \"secp256k1\"\n            },\n            \"signature_type\": \"ecdsa\",\n            \"hex_bytes\": \"string\"\n        }\n    ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -224,7 +224,7 @@
           ]
         }
       },
-      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to specified network or network not yet supported\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
+      "response": "{\"signed_transaction\":\"88030270726f6f66f376616c75e597017b018903af020269e47369676e61747572e5830103c102633063656338336464643630623361636262613135333834633037373435373565353030333336356464383237386338323562346164386639636433323732643539333164666561313165396633336262336635376562303834306534353565333166333134323562326239363462396239306361373136396437326530633009000703737472696ee701000047c90208616d6f756ef46269746d617024696e697424b064657374696e6174696fee6665e56f7264696e61ec706172656ef473616cf4736f757263e50bcc020176616c75e5020914020100030001012e002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251656667e8020100070005cc02020906020100070005cc020209060201001a0018cb0202686173e86f7264696e61ec0903736f6d65486173e808070005cc020209040302010002010005000309a4132e002ccc022903444147324555646563714677454763674163483161633277727367386163726747777251616263e4020100010000\"}"
     },
     {
       "name": "construction derive",
@@ -233,7 +233,7 @@
         "header": [],
         "body": {
           "mode": "raw",
-          "raw": "{\n    \"network_identifier\": {\n        \"blockchain\": \"dag\",\n        \"network\": \"mainnet\"\n    },\n    \"public_key\": {\n        \"hex_bytes\": \"bb2c6883916fc5fd703a69dbb8685cb3db1f6cbef131afe9e8fbd72faf7f6129e068f1ea48f2e4dd9f1297a5ce0acfe7b570b7a22a3452ef182f2533188270e6\",\n        \"curve_type\": \"secp256k1\"\n    },\n    \"metadata\": {}\n}",
+          "raw": "{\n    \"network_identifier\": {\n        \"blockchain\": \"dag\",\n        \"network\": \"mainnet\"\n    },\n    \"public_key\": {\n        \"hex_bytes\": \"02c0cec83ddd60b3acbba15384c0774575e5003365dd8278c825b4ad8f9cd3272d\",\n        \"curve_type\": \"secp256k1\"\n    },\n    \"metadata\": {}\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -252,7 +252,7 @@
           ]
         }
       },
-      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to specified network or network not yet supported\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
+      "response": "{\"address\":\"DAG3JxRL8KuYAcdc58o4JdGAmNjJCN5woNFDsWEA\",\"account_identifier\":{\"address\":\"DAG3JxRL8KuYAcdc58o4JdGAmNjJCN5woNFDsWEA\",\"sub_account\":null,\"metadata\":null},\"metadata\":null}"
     },
     {
       "name": "construction hash",

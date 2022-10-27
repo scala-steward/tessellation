@@ -77,8 +77,6 @@ object RosettaConstructionSuite extends ResourceSuite with Checkers {
             expectedResponseJson = cleanJson(expectedResponseJson)
             actualResponseJson = cleanJson(actualResponseJson)
 
-            println(f"test ${entryCursor.downField("name").as[String].getOrElse("")} result ${expectedResponseJson == actualResponseJson} expected ${expectedResponseJson} actual ${actualResponseJson}")
-
             expectedResponseJson == actualResponseJson
           } match {
             case Left(_)      => false
