@@ -32,3 +32,6 @@ site/
 .bsp/
 scripts/
 /logs/
+**/*.iml
+rosetta/*.jar
+rosetta/rosetta-data
