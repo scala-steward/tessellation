@@ -8,6 +8,7 @@ import org.tessellation.dag.l1.infrastructure.db.Database
 import org.tessellation.dag.l1.infrastructure.transaction.storage.SignedTransactionGenerator.signedTransactionGen
 import org.tessellation.dag.l1.infrastructure.transaction.storage.TransactionIndexDbStorage
 import org.tessellation.dag.l1.rosetta.model.network.NetworkStatus
+import org.tessellation.dag.l1.rosetta.search.model.BlockSearchRequest
 import org.tessellation.ext.cats.effect._
 import org.tessellation.ext.crypto.RefinedHashable
 import org.tessellation.ext.kryo.KryoRegistrationId
@@ -26,7 +27,6 @@ import eu.timepit.refined.types.string.NonEmptyString
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 import org.scalacheck.Gen.listOfN
-import org.tessellation.dag.l1.rosetta.search.model.BlockSearchRequest
 import weaver.SimpleIOSuite
 import weaver.scalacheck.Checkers
 

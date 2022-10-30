@@ -1,23 +1,24 @@
 package org.tessellation.dag.l1.rosetta.server
 
+import org.tessellation.rosetta.server.model.Operation
+import org.tessellation.schema.address.DAGAddressRefined._
+import org.tessellation.schema.address.{Address, DAGAddressRefined}
+import org.tessellation.schema.transaction._
+import org.tessellation.security.hash.Hash
+
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
-import org.tessellation.rosetta.server.model.Operation
-import org.tessellation.schema.address.{Address, DAGAddressRefined}
-import org.tessellation.schema.address.DAGAddressRefined._
-import org.tessellation.schema.transaction.{Transaction, TransactionAmount, TransactionFee, TransactionOrdinal, TransactionReference, TransactionSalt}
-import org.tessellation.security.hash.Hash
 
 object RosettaOperationUtilities {
 
   def operationsToDAGTransaction(
-                                  src: String,
-                                  fee: Long,
-                                  operations: List[Operation],
-                                  parentHash: String,
-                                  parentOrdinal: Long,
-                                  salt: Option[Long]
-                                ): Either[String, Transaction] = {
+    src: String,
+    fee: Long,
+    operations: List[Operation],
+    parentHash: String,
+    parentOrdinal: Long,
+    salt: Option[Long]
+  ): Either[String, Transaction] = {
     // TODO: Same question here as below, one or two operations?
     val operationPositive = operations.filter(_.amount.exists(_.value.toLong > 0)).head
     val amount = operationPositive.amount.get.value.toLong

@@ -2,17 +2,17 @@ package org.tessellation.dag.l1.rosetta.server
 
 import org.tessellation.dag.l1.rosetta.server.CurrencyConstants.DAGCurrency
 import org.tessellation.dag.l1.rosetta.server.enums.CurrencyTransferType.TRANSFER
-import org.tessellation.rosetta.server.model.{AccountIdentifier, Amount, Operation, OperationIdentifier}
+import org.tessellation.rosetta.server.model._
 import org.tessellation.schema.transaction.Transaction
 
 object TransactionUtilities {
 
   def translateTransactionToOperations(
-                                           tx: Transaction,
-                                           status: String,
-                                           includeNegative: Boolean = true,
-                                           ignoreStatus: Boolean = false
-                                         ): List[Operation] = {
+    tx: Transaction,
+    status: String,
+    includeNegative: Boolean = true,
+    ignoreStatus: Boolean = false
+  ): List[Operation] = {
     // TODO: Huge question, do we need to represent another operation for the
     // negative side of this transaction?
     // if so remove list type.

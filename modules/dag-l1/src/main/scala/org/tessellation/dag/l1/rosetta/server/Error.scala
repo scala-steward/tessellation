@@ -1,11 +1,12 @@
 package org.tessellation.dag.l1.rosetta.server
 
 import cats.implicits.catsSyntaxTuple3Parallel
-import org.tessellation.rosetta.server.model.{Error => RosettaError}
+
 import org.tessellation.dag.l1.rosetta.server.enums.ErrorDescription.ErrorDescription
-import org.tessellation.dag.l1.rosetta.server.enums.{ErrorDescription, ErrorMessage}
 import org.tessellation.dag.l1.rosetta.server.enums.ErrorMessage.ErrorMessage
+import org.tessellation.dag.l1.rosetta.server.enums.{ErrorDescription, ErrorMessage}
 import org.tessellation.rosetta.server.model.dag.schema.{ErrorDetailKeyValue, ErrorDetails}
+import org.tessellation.rosetta.server.model.{Error => RosettaError}
 
 object Error {
 

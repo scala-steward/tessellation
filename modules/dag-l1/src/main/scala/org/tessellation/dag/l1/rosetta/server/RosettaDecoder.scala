@@ -2,16 +2,18 @@ package org.tessellation.dag.l1.rosetta.server
 
 import cats.MonadThrow
 import cats.implicits.toFunctorOps
-import io.circe.Decoder
-import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
-import org.http4s.{Request, Response}
-import org.http4s.circe.{JsonDecoder, toMessageSyntax}
-import org.http4s.dsl.Http4sDsl
-import org.tessellation.dag.l1.rosetta.server.Error.{makeErrorCode, makeErrorCodeMsg}
-import org.tessellation.rosetta.server.model.dag.schema.{ErrorDetailKeyValue, ErrorDetails}
-import org.tessellation.rosetta.server.model.dag.decoders._
 
 import scala.util.Try
+
+import org.tessellation.dag.l1.rosetta.server.Error.{makeErrorCode, makeErrorCodeMsg}
+import org.tessellation.rosetta.server.model.dag.decoders._
+import org.tessellation.rosetta.server.model.dag.schema.{ErrorDetailKeyValue, ErrorDetails}
+
+import io.circe.Decoder
+import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
+import org.http4s.circe.{JsonDecoder, toMessageSyntax}
+import org.http4s.dsl.Http4sDsl
+import org.http4s.{Request, Response}
 
 object RosettaDecoder {
 

@@ -4,7 +4,9 @@ object ErrorDescription extends Enumeration {
   type ErrorDescription = Value
 
   val UNKNOWN_INTERNAL_ERROR = Value(0, "Unable to determine the error type.")
-  val UNSUPPORTED_NETWORK = Value(1, "Unable to route request to the specified network or the network is not yet supported.")
+
+  val UNSUPPORTED_NETWORK =
+    Value(1, "Unable to route request to the specified network or the network is not yet supported.")
   val UNKNOWN_HASH = Value(2, "Unable to find a reference to the hash.")
   val INVALID_REQUEST = Value(3, "Unable to decode the request.")
   val ADDRESS_MALFORMED = Value(4, "The address is invalidly formatted or otherwise un-parseable.")

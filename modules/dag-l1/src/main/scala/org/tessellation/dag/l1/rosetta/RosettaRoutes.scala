@@ -1,17 +1,28 @@
 package org.tessellation.dag.l1.rosetta
 
 import java.security.{PublicKey => JPublicKey}
+
 import cats.Order
 import cats.data.NonEmptySet
 import cats.effect.Async
-import cats.implicits.toSemigroupKOps
-import org.tessellation.dag.l1.rosetta.server.TransactionUtilities.translateTransactionToOperations
-import cats.implicits.toFunctorOps
+import cats.implicits.{toFunctorOps, toSemigroupKOps}
 import cats.syntax.flatMap._
 
 import scala.collection.immutable.SortedSet
 import scala.util.Try
+
 import org.tessellation.dag.l1.domain.rosetta.server.{BlockIndexClient, L1Client}
+import org.tessellation.dag.l1.rosetta.search.model.BlockSearchRequest
+import org.tessellation.dag.l1.rosetta.server.CurrencyConstants.DAGCurrency
+import org.tessellation.dag.l1.rosetta.server.Error.{getErrors, makeErrorCode}
+import org.tessellation.dag.l1.rosetta.server.RosettaDecoder.RefinedRosettaRequestDecoder
+import org.tessellation.dag.l1.rosetta.server.RosettaOperationUtilities.operationsToDAGTransaction
+import org.tessellation.dag.l1.rosetta.server.RosettaSignatureUtilities.convertSignature
+import org.tessellation.dag.l1.rosetta.server.RosettaSnapshotUtilities.convertSnapshotsToBlockEvents
+import org.tessellation.dag.l1.rosetta.server.RosettaTransactionUtilities.translateRosettaTransaction
+import org.tessellation.dag.l1.rosetta.server.TransactionUtilities.translateTransactionToOperations
+import org.tessellation.dag.l1.rosetta.server.enums.CurrencyTransferType.TRANSFER
+import org.tessellation.dag.l1.rosetta.server.enums.SignatureType.ECDSA
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
@@ -26,25 +37,17 @@ import org.tessellation.security.key.ops.PublicKeyOps
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.signature.SignatureProof
 import org.tessellation.security.{Hashable, SecurityProvider}
+
 import eu.timepit.refined.types.all.PosLong
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
-import org.tessellation.dag.l1.rosetta.server.CurrencyConstants.DAGCurrency
-import org.tessellation.dag.l1.rosetta.server.Error.{getErrors, makeErrorCode}
-import org.tessellation.dag.l1.rosetta.server.RosettaDecoder.RefinedRosettaRequestDecoder
-import org.tessellation.dag.l1.rosetta.server.RosettaTransactionUtilities.translateRosettaTransaction
-import org.tessellation.dag.l1.rosetta.server.enums.SignatureType.ECDSA
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+
 import MockData.mockup
 import examples.proofs
 import SignatureProof._
 import Util.{getPublicKeyFromBytes, reduceListEither}
-import org.tessellation.dag.l1.rosetta.search.model.{AccountBlockResponse, BlockSearchRequest}
-import org.tessellation.dag.l1.rosetta.server.RosettaOperationUtilities.operationsToDAGTransaction
-import org.tessellation.dag.l1.rosetta.server.RosettaSignatureUtilities.convertSignature
-import org.tessellation.dag.l1.rosetta.server.RosettaSnapshotUtilities.convertSnapshotsToBlockEvents
-import org.tessellation.dag.l1.rosetta.server.enums.CurrencyTransferType.TRANSFER
 
 /**
   * The data model for these routes was code-genned according to openapi spec using
@@ -257,7 +260,8 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
               .left
               .map(_ => error(9))
               .map { t: Transaction =>
-                convertSignature(constructionCombineRequest.signatures).flatMap { _.left
+                convertSignature(constructionCombineRequest.signatures).flatMap {
+                  _.left
                     .map(InternalServerError(_))
                     .map { prf =>
                       val serializedTransaction = KryoSerializer[F]
@@ -465,14 +469,13 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
             case Some(meta) => {
               for {
                 unsignedTx <- operationsToDAGTransaction(
-                    meta.srcAddress,
-                    meta.fee,
-                    constructionPayloadsRequest.operations,
-                    meta.lastTransactionHashReference,
-                    meta.lastTransactionOrdinalReference,
-                    meta.salt
-                  )
-                  .left
+                  meta.srcAddress,
+                  meta.fee,
+                  constructionPayloadsRequest.operations,
+                  meta.lastTransactionHashReference,
+                  meta.lastTransactionOrdinalReference,
+                  meta.salt
+                ).left
                   .map(e => errorMsg(0, e))
                 serializedTx <- KryoSerializer[F]
                   .serialize(unsignedTx)
@@ -563,8 +566,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                 .map(err => errorMsg(0, f"blockevents query failure: ${err}"))
                 .map { snapshot =>
                   // TODO: handle block_removed
-                  convertSnapshotsToBlockEvents(snapshot, "block_added")
-                    .left
+                  convertSnapshotsToBlockEvents(snapshot, "block_added").left
                     .map(errorMsg(0, _))
                     .map { blockEvents =>
                       val maxSeq = blockEvents.map(_.sequence).max
