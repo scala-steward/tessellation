@@ -1,7 +1,6 @@
 package org.tessellation.dag.l1.domain.rosetta.server
 
-import org.tessellation.dag.l1.domain.rosetta.server.api.model.BlockSearchRequest
-import org.tessellation.dag.l1.rosetta.{AccountBlockResponse, BlockSearchResponse}
+import org.tessellation.dag.l1.rosetta.search.model.{AccountBlockResponse, BlockSearchRequest, BlockSearchResponse}
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata
 import org.tessellation.rosetta.server.model.{BlockIdentifier, PartialBlockIdentifier}

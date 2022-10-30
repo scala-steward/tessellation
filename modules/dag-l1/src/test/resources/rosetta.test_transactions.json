@@ -31,7 +31,7 @@
           ]
         }
       },
-      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to specified network or network not yet supported\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
+      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to the specified network or the network is not yet supported.\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
     },
     {
       "name": "invalid network",
@@ -59,7 +59,7 @@
           ]
         }
       },
-      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to specified network or network not yet supported\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
+      "response": "{\"code\":1,\"message\":\"Unsupported network\",\"description\":\"Unable to route request to the specified network or the network is not yet supported.\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Subnetworks not supported\"}]}}"
     },
     {
       "name": "account balance",
@@ -115,7 +115,7 @@
           ]
         }
       },
-      "response": "{\"code\":0,\"message\":\"Unknown internal error\",\"description\":\"Unable to determine error type\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"UTXO endpoints not implemented\"}]}}"
+      "response": "{\"code\":0,\"message\":\"Unknown internal error\",\"description\":\"Unable to determine the error type.\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"UTXO endpoints not implemented\"}]}}"
     },
     {
       "name": "block",
@@ -169,7 +169,7 @@
           ]
         }
       },
-      "response": "{\"code\":5,\"message\":\"Block service failure\",\"description\":\"Request to block service failed\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Error\"}]}}"
+      "response": "{\"code\":5,\"message\":\"Block service failure\",\"description\":\"The request to the block service failed.\",\"retriable\":true,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Error\"}]}}"
     },
     {
       "name": "call",
@@ -196,7 +196,7 @@
           ]
         }
       },
-      "response": "{\"code\":8,\"message\":\"Unsupported operation\",\"description\":\"Operation not supported\",\"retriable\":true,\"details\":null}"
+      "response": "{\"code\":8,\"message\":\"Unsupported operation\",\"description\":\"The operation is not supported.\",\"retriable\":true,\"details\":null}"
     },
     {
       "name": "construction combine",
@@ -447,7 +447,7 @@
           ]
         }
       },
-      "response": "{\"code\":15,\"message\":\"Malformed request\",\"description\":\"Missing required information or necessary fields\",\"retriable\":false,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Missing metadata containing last transaction parent reference\"}]}}"
+      "response": "{\"code\":15,\"message\":\"Malformed request\",\"description\":\"The request is missing required information or necessary fields.\",\"retriable\":false,\"details\":{\"details\":[{\"name\":\"exception\",\"value\":\"Missing metadata containing last transaction parent reference\"}]}}"
     },
     {
       "name": "construction submit",

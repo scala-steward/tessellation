@@ -2,10 +2,10 @@ package org.tessellation.dag.l1.rosetta.server
 
 import cats.effect.Async
 import cats.implicits.{toFlatMapOps, toFunctorOps}
-
 import org.tessellation.dag.l1.domain.rosetta.server.L1Client
 import org.tessellation.dag.l1.rosetta.MockData.mockup
-import org.tessellation.dag.l1.rosetta.{MockData, SnapshotInfo, examples}
+import org.tessellation.dag.l1.rosetta.server.api.model.SnapshotInfo
+import org.tessellation.dag.l1.rosetta.{MockData, examples}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.rosetta.server.model._
 import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata

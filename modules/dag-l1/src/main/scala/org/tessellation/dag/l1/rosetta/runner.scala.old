@@ -37,18 +37,20 @@ case class LastTransactionResponse(
   constructionMetadataResponseMetadata: Option[ConstructionMetadataResponseMetadata],
   suggestedFee: Option[Long]
 )
-
+/*
 case class SnapshotInfo(
   hash: String,
   height: Long,
   timestamp: Long
 )
-
+*/
+/*
 case class AccountBlockResponse(
   amount: Long,
   snapshotHash: String,
   height: Long
 )
+*/
 /*
 case class BlockSearchRequest(
   isOr: Boolean,
@@ -61,17 +63,20 @@ case class BlockSearchRequest(
   maxBlock: Option[Long]
 )
  */
+/*
 case class TransactionWithBlockHash(
   transaction: Signed[DAGTransaction],
   blockHash: String,
   blockIndex: Long
 )
-
+*/
+/*
 case class BlockSearchResponse(
   transactions: List[TransactionWithBlockHash],
   total: Long,
   nextOffset: Option[Long]
 )
+*/
 
 import cats.syntax.flatMap._
 
@@ -96,7 +101,7 @@ object Rosetta {
   }
 
   import cats.effect._
-
+/*
   def convertSignature[F[_]: KryoSerializer: SecurityProvider: Async](
     signature: List[Signature]
   ): F[Either[model.Error, NonEmptyList[SignatureProof]]] = {
@@ -107,13 +112,11 @@ object Rosetta {
 //      .left.map(e => makeErrorCodeMsg(0, e.getMessage))
       value1.map { pk =>
         s.signatureType match {
-          case "ecdsa" => {
-            println(s"+++ Here and signature type ${s.signatureType == "ecdsa"} +++")
+          case "ecdsa" =>
             Right({
               // TODO, validate curve type.
               SignatureProof(pk.toId, org.tessellation.security.signature.signature.Signature(Hex(s.hexBytes)))
             })
-          }
           case x => Left(makeErrorCodeMsg(10, s"${x} not supported"))
         }
       }
@@ -148,6 +151,7 @@ object Rosetta {
       }
       .map(_.map(q => NonEmptyList(q.head, q.tail)))
   }
+ */
 
   // TODO: From config / and/or arg
   val endpoints = Map(
@@ -218,10 +222,7 @@ object Rosetta {
               InternalServerError(makeErrorCodeMsg(0, t.getMessage, retriable = true))
             })
           res.flatMap { r =>
-            r.asJson.map { j =>
-              println(f"+++ Json: ${j.toString()}")
-              r
-            }
+            r.asJson.map(_ => r)
           }
         }
       }

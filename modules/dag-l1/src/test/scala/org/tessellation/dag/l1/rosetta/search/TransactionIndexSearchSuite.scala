@@ -3,7 +3,6 @@ package org.tessellation.dag.l1.rosetta.search
 import cats.effect.{IO, Resource}
 
 import org.tessellation.dag.l1.config.types.DBConfig
-import org.tessellation.dag.l1.domain.rosetta.server.api.model.BlockSearchRequest
 import org.tessellation.dag.l1.domain.transaction.storage.TransactionIndexStorage
 import org.tessellation.dag.l1.infrastructure.db.Database
 import org.tessellation.dag.l1.infrastructure.transaction.storage.SignedTransactionGenerator.signedTransactionGen
@@ -27,6 +26,7 @@ import eu.timepit.refined.types.string.NonEmptyString
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
 import org.scalacheck.Gen.listOfN
+import org.tessellation.dag.l1.rosetta.search.model.BlockSearchRequest
 import weaver.SimpleIOSuite
 import weaver.scalacheck.Checkers
 

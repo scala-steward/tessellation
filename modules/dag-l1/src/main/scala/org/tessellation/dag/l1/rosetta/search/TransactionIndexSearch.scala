@@ -1,8 +1,6 @@
 package org.tessellation.dag.l1.rosetta.search
 
 import cats.effect.MonadCancelThrow
-
-import org.tessellation.dag.l1.domain.rosetta.server.api.model.BlockSearchRequest
 import org.tessellation.dag.l1.domain.transaction.storage.{SignedTransactionIndexEntry, TransactionIndexStorage}
 import org.tessellation.dag.l1.infrastructure.db.Database
 import org.tessellation.dag.l1.rosetta.model.network.NetworkStatus
@@ -11,6 +9,7 @@ import org.tessellation.schema.address.{Address, DAGAddressRefined}
 import org.tessellation.security.hash.Hash
 
 import eu.timepit.refined.refineV
+import org.tessellation.dag.l1.rosetta.search.model.BlockSearchRequest
 
 object TransactionIndexSearch {
 

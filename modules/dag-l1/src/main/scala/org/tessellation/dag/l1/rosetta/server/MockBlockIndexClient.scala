@@ -2,11 +2,11 @@ package org.tessellation.dag.l1.rosetta.server
 
 import cats.effect.Async
 import cats.implicits.toFunctorOps
-
 import org.tessellation.dag.l1.domain.rosetta.server.BlockIndexClient
-import org.tessellation.dag.l1.domain.rosetta.server.api.model.BlockSearchRequest
 import org.tessellation.dag.l1.rosetta.MockData.mockup
 import org.tessellation.dag.l1.rosetta._
+import org.tessellation.dag.l1.rosetta.search.model.{AccountBlockResponse, BlockSearchRequest, BlockSearchResponse}
+import org.tessellation.dag.l1.rosetta.server.api.model.TransactionWithBlockHash
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata
 import org.tessellation.rosetta.server.model.{BlockIdentifier, PartialBlockIdentifier}
@@ -20,7 +20,7 @@ object MockBlockIndexClient {
       def searchBlocks(blockSearchRequest: BlockSearchRequest) =
         Async[F].pure {
           Right(
-            BlockSearchResponse(List(TransactionWithBlockHash(examples.transaction, examples.sampleHash, 0)), 1, None)
+            BlockSearchResponse(List(api.model.TransactionWithBlockHash(examples.transaction, examples.sampleHash, 0)), 1, None)
           )
         }
 

@@ -1,17 +1,16 @@
 package org.tessellation.dag.l1.rosetta
 
 import java.security.{PublicKey => JPublicKey}
-
 import cats.Order
 import cats.data.NonEmptySet
 import cats.effect.Async
-import cats.implicits.{toFlatMapOps, toFunctorOps, toSemigroupKOps}
+import cats.implicits.toSemigroupKOps
+import org.tessellation.dag.l1.rosetta.server.TransactionUtilities.translateTransactionToOperations
+import cats.implicits.toFunctorOps
 import cats.syntax.flatMap._
 
 import scala.collection.immutable.SortedSet
 import scala.util.Try
-
-import org.tessellation.dag.l1.domain.rosetta.server.api.model.BlockSearchRequest
 import org.tessellation.dag.l1.domain.rosetta.server.{BlockIndexClient, L1Client}
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.crypto._
@@ -20,25 +19,32 @@ import org.tessellation.rosetta.server.model._
 import org.tessellation.rosetta.server.model.dag.decoders._
 import org.tessellation.rosetta.server.model.dag.schema._
 import org.tessellation.schema.address.{Address, DAGAddressRefined}
-import org.tessellation.schema.transaction.{Transaction => DAGTransaction}
+import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.key.ops.PublicKeyOps
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.signature.SignatureProof
 import org.tessellation.security.{Hashable, SecurityProvider}
-
 import eu.timepit.refined.types.all.PosLong
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
+import org.tessellation.dag.l1.rosetta.server.CurrencyConstants.DAGCurrency
+import org.tessellation.dag.l1.rosetta.server.Error.{getErrors, makeErrorCode}
+import org.tessellation.dag.l1.rosetta.server.RosettaDecoder.RefinedRosettaRequestDecoder
+import org.tessellation.dag.l1.rosetta.server.RosettaTransactionUtilities.translateRosettaTransaction
+import org.tessellation.dag.l1.rosetta.server.enums.SignatureType.ECDSA
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-
-import Rosetta._
 import MockData.mockup
 import examples.proofs
 import SignatureProof._
 import Util.{getPublicKeyFromBytes, reduceListEither}
+import org.tessellation.dag.l1.rosetta.search.model.{AccountBlockResponse, BlockSearchRequest}
+import org.tessellation.dag.l1.rosetta.server.RosettaOperationUtilities.operationsToDAGTransaction
+import org.tessellation.dag.l1.rosetta.server.RosettaSignatureUtilities.convertSignature
+import org.tessellation.dag.l1.rosetta.server.RosettaSnapshotUtilities.convertSnapshotsToBlockEvents
+import org.tessellation.dag.l1.rosetta.server.enums.CurrencyTransferType.TRANSFER
 
 /**
   * The data model for these routes was code-genned according to openapi spec using
@@ -138,7 +144,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                       Ok(
                         AccountBalanceResponse(
                           BlockIdentifier(y.height, y.snapshotHash),
-                          List(Amount(y.amount.toString, DagCurrency, None)),
+                          List(Amount(y.amount.toString, DAGCurrency, None)),
                           None
                         )
                       )
@@ -210,7 +216,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
               .map(_.map { signedTransaction =>
                 Ok(
                   BlockTransactionResponse(
-                    translateTransaction(signedTransaction).toOption.get
+                    translateRosettaTransaction(signedTransaction).toOption.get
                   )
                 )
               }.getOrElse(error(7)))
@@ -245,18 +251,18 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
             errorMsg(3, "No signatures found")
           } else {
             KryoSerializer[F]
-              .deserialize[DAGTransaction](
+              .deserialize[Transaction](
                 Hex(constructionCombineRequest.unsignedTransaction).toBytes // TODO: Handle error here for invalid hex
               )
               .left
               .map(_ => error(9))
-              .map { t: DAGTransaction =>
-                Rosetta.convertSignature(constructionCombineRequest.signatures).flatMap { _.left
+              .map { t: Transaction =>
+                convertSignature(constructionCombineRequest.signatures).flatMap { _.left
                     .map(InternalServerError(_))
                     .map { prf =>
                       val serializedTransaction = KryoSerializer[F]
                         .serialize(
-                          Signed[DAGTransaction](
+                          Signed[Transaction](
                             t,
                             NonEmptySet(prf.head, SortedSet(prf.tail: _*))(
                               Order.fromOrdering(SignatureProof.OrderingInstance)
@@ -301,7 +307,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
           _ <- validateNetwork(constructionHashRequest.networkIdentifier)
         } yield {
           KryoSerializer[F]
-            .deserialize[Signed[DAGTransaction]](Hex(constructionHashRequest.signedTransaction).toBytes)
+            .deserialize[Signed[Transaction]](Hex(constructionHashRequest.signedTransaction).toBytes)
             .left
             .map(_ => error(9))
             .map(
@@ -365,7 +371,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                               Ok(
                                 ConstructionMetadataResponse(
                                   metadata,
-                                  Some(List(Amount(metadata.fee.toString, DagCurrency, None)))
+                                  Some(List(Amount(metadata.fee.toString, DAGCurrency, None)))
                                 )
                               )
                           ).getOrElse(
@@ -391,7 +397,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
             val bytes = h.toBytes
             if (constructionParseRequest.signed) {
               KryoSerializer[F]
-                .deserialize[Signed[DAGTransaction]](bytes)
+                .deserialize[Signed[Transaction]](bytes)
                 .left
                 .map(t => errorMsg(14, t.getMessage))
                 .map { stx =>
@@ -405,7 +411,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                     Ok(
                       ConstructionParseResponse(
                         // TODO: Verify what this status needs to be, because we don't know it at this point
-                        translateDAGTransactionToOperations(
+                        translateTransactionToOperations(
                           stx.value,
                           ChainObjectStatus.Unknown.toString,
                           ignoreStatus = true
@@ -422,14 +428,14 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                 .merge
             } else {
               KryoSerializer[F]
-                .deserialize[DAGTransaction](bytes)
+                .deserialize[Transaction](bytes)
                 .left
                 .map(t => errorMsg(14, t.getMessage))
                 .map { tx =>
                   Ok(
                     ConstructionParseResponse(
                       // TODO: Verify what this status needs to be, because we don't know it at this point
-                      translateDAGTransactionToOperations(
+                      translateTransactionToOperations(
                         tx,
                         ChainObjectStatus.Unknown.toString,
                         ignoreStatus = true
@@ -458,8 +464,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
               errorMsg(15, "Missing metadata containing last transaction parent reference", retriable = false)
             case Some(meta) => {
               for {
-                unsignedTx <- Rosetta
-                  .operationsToDAGTransaction(
+                unsignedTx <- operationsToDAGTransaction(
                     meta.srcAddress,
                     meta.fee,
                     constructionPayloadsRequest.operations,
@@ -481,7 +486,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                     Some(meta.srcAddress),
                     Some(AccountIdentifier(meta.srcAddress, None, None)),
                     toSignBytes,
-                    Some(signatureTypeEcdsa)
+                    Some(ECDSA.toString)
                   )
                 )
               } yield {
@@ -522,7 +527,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
         } yield {
           validateHex(constructionSubmitRequest.signedTransaction).map { hex =>
             KryoSerializer[F]
-              .deserialize[Signed[DAGTransaction]](hex.toBytes)
+              .deserialize[Signed[Transaction]](hex.toBytes)
               .left
               .map(throwable => errorMsg(14, throwable.getMessage))
               .map { signedTransaction =>
@@ -558,8 +563,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                 .map(err => errorMsg(0, f"blockevents query failure: ${err}"))
                 .map { snapshot =>
                   // TODO: handle block_removed
-                  Rosetta
-                    .convertSnapshotsToBlockEvents(snapshot, "block_added")
+                  convertSnapshotsToBlockEvents(snapshot, "block_added")
                     .left
                     .map(errorMsg(0, _))
                     .map { blockEvents =>
@@ -604,7 +608,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
           mempoolTransaction.flatMap {
             // TODO: Enum
             _.map { signedTransaction =>
-              val t = Rosetta.translateTransaction(signedTransaction, status = ChainObjectStatus.Pending.toString)
+              val t = translateRosettaTransaction(signedTransaction, status = ChainObjectStatus.Pending.toString)
 
               t.map(transaction => Ok(MempoolTransactionResponse(transaction, None))).getOrElse(error(0))
             }.getOrElse(error(2))
@@ -649,11 +653,8 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                             OperationStatus(ChainObjectStatus.Unknown.toString, successful = false),
                             OperationStatus(ChainObjectStatus.Accepted.toString, successful = true)
                           ),
-                          List(dagCurrencyTransferType),
-                          errorCodes.map {
-                            case (code, (description, extended)) =>
-                              Error(code, description, Some(extended), retriable = true, None)
-                          }.toList,
+                          List(TRANSFER.toString),
+                          getErrors(),
                           historicalBalanceLookup = false,
                           None,
                           List(),
@@ -725,7 +726,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                 .map(errorMsg(0, _))
                 .map { res =>
                   val value = res.transactions.map { tx =>
-                    translateTransaction(tx.transaction).left
+                    translateRosettaTransaction(tx.transaction).left
                       .map(InternalServerError(_))
                       .map(txR => List(BlockTransaction(BlockIdentifier(tx.blockIndex, tx.blockHash), txR)))
                   }
@@ -750,7 +751,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
         case (balanceAddress, balance) =>
           // TODO: Empty transaction translator
           Signed(
-            DAGTransaction(
+            Transaction(
               Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
               balanceAddress,
               TransactionAmount(PosLong.from(balance.value).toOption.get),
@@ -771,7 +772,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
 
     val rewardTransactions = snapshot.rewards.toList.map { rw =>
       Signed(
-        DAGTransaction(
+        Transaction(
           Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
           rw.destination,
           rw.amount,
@@ -786,8 +787,8 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
       )
     }
 
-    blockTransactions.map(translateTransaction(_)) ++ (rewardTransactions ++ genesisTxs).map(
-      translateTransaction(_, includeNegative = false)
+    blockTransactions.map(translateRosettaTransaction(_)) ++ (rewardTransactions ++ genesisTxs).map(
+      translateRosettaTransaction(_, includeNegative = false)
     )
   }
 

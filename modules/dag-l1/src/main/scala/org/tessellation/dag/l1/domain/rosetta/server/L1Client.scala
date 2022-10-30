@@ -1,6 +1,6 @@
 package org.tessellation.dag.l1.domain.rosetta.server
 
-import org.tessellation.dag.l1.rosetta.SnapshotInfo
+import org.tessellation.dag.l1.rosetta.server.api.model.SnapshotInfo
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.rosetta.server.model.NetworkStatusResponse
 import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata

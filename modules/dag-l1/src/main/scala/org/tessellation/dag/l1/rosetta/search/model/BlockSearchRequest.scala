@@ -1,4 +1,4 @@
-package org.tessellation.dag.l1.domain.rosetta.server.api.model
+package org.tessellation.dag.l1.rosetta.search.model
 
 case class BlockSearchRequest(
   isOr: Boolean,
