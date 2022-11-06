@@ -214,6 +214,20 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
       _.find(_.hash === hash)
     }
 
+  def getAllWaitingTransactions() = {
+    val keys = waitingTransactions.keys
+
+    keys.flatMap { x =>
+      val transactions = x.map { address =>
+        waitingTransactions(address).get.map(_.map(_.toNonEmptyList.toList).getOrElse(List.empty))
+      }
+
+      transactions.foldLeft(Async[F].pure(List.empty[Hashed[Transaction]]))(
+        (a, b) => a.flatMap(transactionsA => b.map(transactionsB => transactionsA ::: transactionsB))
+      )
+    }
+  }
+
 }
 
 object TransactionStorage {
