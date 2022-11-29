@@ -213,18 +213,24 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
         val endpointResponse = for {
           _ <- validateNetwork(transactionRequest.networkIdentifier)
         } yield {
-          blockIndexClient.queryBlockTransaction(transactionRequest.blockIdentifier).flatMap { transactionEither =>
-            transactionEither.left
-              .map(errorMsg(5, _))
-              .map(_.map { signedTransaction =>
-                Ok(
-                  BlockTransactionResponse(
-                    translateRosettaTransaction(signedTransaction).toOption.get
+          blockIndexClient
+            .queryBlockTransaction(transactionRequest.blockIdentifier, transactionRequest.transactionIdentifier)
+            .flatMap(
+              transactionEither =>
+                transactionEither.left
+                  .map(errorMsg(5, _))
+                  .map(
+                    _.map(
+                      signedTransaction =>
+                        Ok(
+                          BlockTransactionResponse(
+                            translateRosettaTransaction(signedTransaction).toOption.get
+                          )
+                        )
+                    ).getOrElse(error(7))
                   )
-                )
-              }.getOrElse(error(7)))
-              .merge
-          }
+                  .merge
+            )
         }
 
         endpointResponse.merge

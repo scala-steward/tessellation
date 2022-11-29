@@ -1,7 +1,5 @@
 package org.tessellation.dag.l1.rosetta.server
 
-import cats.effect.Async
-
 import org.tessellation.dag.l1.rosetta.Util
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.crypto._
@@ -10,11 +8,10 @@ import org.tessellation.rosetta.server.model.{
   BlockEvent => RosettaBlockEvent,
   BlockIdentifier => RosettaBlockIdentifier
 }
-import org.tessellation.security.SecurityProvider
 
 object RosettaSnapshotUtilities {
 
-  def convertSnapshotsToBlockEvents[F[_]: KryoSerializer: SecurityProvider: Async](
+  def convertSnapshotsToBlockEvents[F[_]: KryoSerializer](
     gs: List[GlobalSnapshot],
     blockEventType: String
   ): Either[String, List[RosettaBlockEvent]] = {

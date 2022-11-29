@@ -6,16 +6,14 @@ import cats.implicits.{toFlatMapOps, toFunctorOps}
 
 import org.tessellation.dag.l1.rosetta.Util
 import org.tessellation.dag.l1.rosetta.server.Error.makeErrorCodeMsg
-import org.tessellation.kryo.KryoSerializer
 import org.tessellation.rosetta.server.model.{Error => RosettaError, Signature => RosettaSignature}
-import org.tessellation.security.SecurityProvider
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.key.ops.PublicKeyOps
 import org.tessellation.security.signature.signature.SignatureProof
 
 object RosettaSignatureUtilities {
 
-  def convertSignature[F[_]: KryoSerializer: SecurityProvider: Async](
+  def convertSignature[F[_]: Async](
     signature: List[RosettaSignature]
   ): F[Either[RosettaError, NonEmptyList[SignatureProof]]] = {
     val value = signature.map { s =>

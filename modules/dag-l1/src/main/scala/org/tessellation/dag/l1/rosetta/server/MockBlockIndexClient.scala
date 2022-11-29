@@ -9,7 +9,7 @@ import org.tessellation.dag.l1.rosetta._
 import org.tessellation.dag.l1.rosetta.search.model.{AccountBlockResponse, BlockSearchRequest, BlockSearchResponse}
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.rosetta.server.model.dag.schema.ConstructionPayloadsRequestMetadata
-import org.tessellation.rosetta.server.model.{BlockIdentifier, PartialBlockIdentifier}
+import org.tessellation.rosetta.server.model.{BlockIdentifier, PartialBlockIdentifier, TransactionIdentifier}
 import org.tessellation.schema.address
 
 object MockBlockIndexClient {
@@ -48,7 +48,7 @@ object MockBlockIndexClient {
           )
         }
 
-      def queryBlockTransaction(blockIdentifier: BlockIdentifier) =
+      def queryBlockTransaction(blockIdentifier: BlockIdentifier, transactionIdentifier: TransactionIdentifier) =
         Async[F].pure {
           Either.cond(
             test = blockIdentifier.index == 0 ||

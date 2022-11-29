@@ -35,3 +35,8 @@ scripts/
 **/*.iml
 rosetta/*.jar
 rosetta/rosetta-data
+*.p12
+.run/
+modules/**/project/
+empty-genesis.csv
+*.json

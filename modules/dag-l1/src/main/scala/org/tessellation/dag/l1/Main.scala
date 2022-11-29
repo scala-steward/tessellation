@@ -16,10 +16,12 @@ import org.tessellation.schema.cluster.ClusterId
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.node.NodeState.SessionStarted
 import org.tessellation.sdk.app.{SDK, TessellationIOApp}
+import org.tessellation.sdk.config.types.HttpServerConfig
 import org.tessellation.sdk.infrastructure.gossip.RumorHandlers
 import org.tessellation.sdk.resources.MkHttpServer
 import org.tessellation.sdk.resources.MkHttpServer.ServerName
 
+import com.comcast.ip4s.{Host, Port}
 import com.monovore.decline.Opts
 import eu.timepit.refined.auto._
 import eu.timepit.refined.boolean.Or
@@ -51,6 +53,8 @@ object Main
         p2pClient = P2PClient.make(sdkP2PClient, sdkResources.client)
         services = Services.make[IO](storages, validators, sdkServices, p2pClient, cfg)
         programs = Programs.make(sdkPrograms, p2pClient, storages)
+        rosettaClients = RosettaClients.make(services, storages)
+
         healthChecks <- HealthChecks
           .make[IO](
             storages,
@@ -71,8 +75,16 @@ object Main
           .start(storages, services, validators, queues, healthChecks, p2pClient, rumorHandler, nodeId, cfg)
           .asResource
 
+        rosettaApi = RosettaApi.make(rosettaClients)
+        _ <- MkHttpServer[IO].newEmber(
+          ServerName("public"),
+          HttpServerConfig(Host.fromString("0.0.0.0").get, Port.fromInt(8080).get),
+          rosettaApi.allRoutes.orNotFound
+        )
+
         api = HttpApi.make[IO](storages, queues, keyPair.getPrivate, services, programs, healthChecks, sdk.nodeId)
-        _ <- MkHttpServer[IO].newEmber(ServerName("public"), cfg.http.publicHttp, api.publicApp)
+        _ <- MkHttpServer[IO]
+          .newEmber(ServerName("public"), cfg.http.publicHttp, api.publicApp)
         _ <- MkHttpServer[IO].newEmber(ServerName("p2p"), cfg.http.p2pHttp, api.p2pApp)
         _ <- MkHttpServer[IO].newEmber(ServerName("cli"), cfg.http.cliHttp, api.cliApp)
         stateChannel <- StateChannel
