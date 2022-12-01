@@ -10,16 +10,22 @@ import org.tessellation.dag.l1.domain.transaction.storage.{
   TransactionIndexStorage
 }
 import org.tessellation.dag.l1.infrastructure.db.Database
+import org.tessellation.dag.l1.rosetta.Util.extractTransactions
 import org.tessellation.dag.l1.rosetta.model.network.NetworkStatus
+import org.tessellation.dag.snapshot.GlobalSnapshot
+import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.height.Height
-import org.tessellation.schema.transaction.Transaction
+import org.tessellation.schema.transaction._
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.signature.Signed
 
 import doobie.implicits._
 import doobie.quill.DoobieContext
+import eu.timepit.refined.auto._
+import eu.timepit.refined.numeric.NonNegative
+import eu.timepit.refined.refineV
 import io.getquill.context.Context
 import io.getquill.{Literal, SqliteDialect}
 
@@ -138,7 +144,7 @@ object TransactionIndexDbStorage {
             val serializedTransaction = moreIndices._5
 
             run(getStoredTransactionIndexById(lift(hash)))
-              .map(_.headOption)
+              .map(queryResult => queryResult.headOption)
               .flatMap {
                 case Some(_) =>
                   run(
@@ -166,6 +172,46 @@ object TransactionIndexDbStorage {
               .transact(xa)
               .as(())
         }.map(x => x.reduce((y, _) => y))
+
+      def indexGlobalSnapshotTransactions(signedSnapshot: Signed[GlobalSnapshot]): F[Unit] = {
+        val transactionLists = extractTransactions(signedSnapshot)
+        val transactions = transactionLists._1 ::: transactionLists._2 ::: transactionLists._3
+
+        transactions.map { signedTransaction =>
+          KryoSerializer[F]
+            .serialize(signedTransaction)
+            .toOption
+            .flatMap { bytes =>
+              signedTransaction.hash.toOption.flatMap { hash =>
+                refineV[NonNegative].apply[Long](signedTransaction.ordinal.value.value).toOption.map { heightValue =>
+                  val payload = (
+                    signedTransaction.source,
+                    signedTransaction.destination,
+                    Height(heightValue),
+                    NetworkStatus.accepted,
+                    bytes
+                  )
+
+                  Map(hash -> payload)
+                }
+              }
+            }
+            .getOrElse {
+              val payload = (
+                Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
+                Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
+                Height(0L),
+                NetworkStatus.canceled,
+                Array.empty: Array[
+                  Byte
+                ]
+              )
+
+              Map(Hash.empty -> payload)
+            }
+        }.traverse(updateStoredTransactionIndexValues(_))
+          .map(_.foldLeft(())((_, _) => ()))
+      }
 
       def getTransactionIndexValuesAnd(
         id: Option[Hash],

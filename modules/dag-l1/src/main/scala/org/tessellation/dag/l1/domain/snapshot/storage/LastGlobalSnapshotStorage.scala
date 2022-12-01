@@ -8,6 +8,8 @@ import cats.syntax.functor._
 import cats.syntax.option._
 import cats.{Applicative, MonadThrow}
 
+import org.tessellation.dag.l1.domain.block.storage.BlockIndexStorage
+import org.tessellation.dag.l1.domain.transaction.storage.TransactionIndexStorage
 import org.tessellation.dag.snapshot.{GlobalSnapshot, SnapshotOrdinal}
 import org.tessellation.ext.cats.syntax.next._
 import org.tessellation.schema.address.Address
@@ -29,15 +31,25 @@ trait LastGlobalSnapshotStorage[F[_]] {
 
 object LastGlobalSnapshotStorage {
 
-  def make[F[_]: Async: Ref.Make]: F[LastGlobalSnapshotStorage[F] with LatestBalances[F]] =
-    (SignallingRef.of[F, Option[Hashed[GlobalSnapshot]]](None)).map(make(_))
+  def make[F[_]: Async: Ref.Make](
+    blockIndexStorage: BlockIndexStorage[F],
+    transactionIndexStorage: TransactionIndexStorage[F]
+  ): F[LastGlobalSnapshotStorage[F] with LatestBalances[F]] =
+    (SignallingRef
+      .of[F, Option[Hashed[GlobalSnapshot]]](None))
+      .map(snapshotR => make(snapshotR, blockIndexStorage, transactionIndexStorage))
 
   def make[F[_]: MonadThrow](
-    snapshotR: SignallingRef[F, Option[Hashed[GlobalSnapshot]]]
+    snapshotR: SignallingRef[F, Option[Hashed[GlobalSnapshot]]],
+    blockIndexStorage: BlockIndexStorage[F],
+    transactionIndexStorage: TransactionIndexStorage[F]
   ): LastGlobalSnapshotStorage[F] with LatestBalances[F] =
     new LastGlobalSnapshotStorage[F] with LatestBalances[F] {
 
-      def set(snapshot: Hashed[GlobalSnapshot]): F[Unit] =
+      def set(snapshot: Hashed[GlobalSnapshot]): F[Unit] = {
+        blockIndexStorage.indexGlobalSnapshot(snapshot.signed)
+        transactionIndexStorage.indexGlobalSnapshotTransactions(snapshot.signed)
+
         snapshotR.modify {
           case Some(current)
               if current.hash === snapshot.lastSnapshotHash && current.ordinal.next === snapshot.ordinal =>
@@ -45,6 +57,7 @@ object LastGlobalSnapshotStorage {
           case other =>
             (other, MonadThrow[F].raiseError[Unit](new Throwable("Failure during setting new global snapshot!")))
         }.flatten
+      }
 
       def setInitial(snapshot: Hashed[GlobalSnapshot]): F[Unit] =
         snapshotR.modify {

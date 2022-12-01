@@ -91,6 +91,37 @@ object BlockIndexDbStorageSuite extends SimpleIOSuite with Checkers {
     }
   }
 
+  test("Test writing a Signed GlobalSnapshot - snapshot hash") {
+    testResource.use {
+      case (store, kryo, security) =>
+        implicit val kryoImplicit = kryo
+        implicit val securityImplicit = security
+
+        mkSnapshots.flatMap {
+          case (snapshot1, _) =>
+            snapshot1.hash
+              .map(
+                hash =>
+                  kryo
+                    .serialize(snapshot1)
+                    .map(
+                      bytes =>
+                        store.updateStoredBlockIndexValues(
+                          Map(hash -> (snapshot1.height.value.value, bytes))
+                        ) >>
+                          store
+                            .getStoredBlockIndexValue(Some(hash), None)
+                            .map(_.map(x => expect.same(x.hash, hash)).getOrElse(expect(false)))
+                    )
+                    .toOption
+                    .getOrElse(IO.pure(expect(false)))
+              )
+              .toOption
+              .getOrElse(IO.pure(expect(false)))
+        }
+    }
+  }
+
   test("Test writing a Signed GlobalSnapshot - snapshot index") {
     testResource.use {
       case (store, kryo, security) =>
@@ -117,6 +148,28 @@ object BlockIndexDbStorageSuite extends SimpleIOSuite with Checkers {
                     )
                     .toOption
                     .getOrElse(IO.pure(expect(false)))
+              )
+              .toOption
+              .getOrElse(IO.pure(expect(false)))
+        }
+    }
+  }
+
+  test("Test indexing a Signed GlobalSnapshot") {
+    testResource.use {
+      case (store, kryo, security) =>
+        implicit val kryoImplicit = kryo
+        implicit val securityImplicit = security
+
+        mkSnapshots.flatMap {
+          case (snapshot1, _) =>
+            snapshot1.hash
+              .map(
+                hash =>
+                  store.indexGlobalSnapshot(snapshot1) >>
+                    store
+                      .getStoredBlockIndexValue(Some(hash), None)
+                      .map(_.map(x => expect.same(x.hash, hash)).getOrElse(expect(false)))
               )
               .toOption
               .getOrElse(IO.pure(expect(false)))

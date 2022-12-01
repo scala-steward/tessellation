@@ -11,6 +11,7 @@ import cats.syntax.traverse._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 
+import org.tessellation.dag.dagSharedKryoRegistrar
 import org.tessellation.dag.domain.block.{BlockReference, DAGBlock}
 import org.tessellation.dag.l1.domain.address.storage.AddressStorage
 import org.tessellation.dag.l1.domain.block.BlockStorage
@@ -19,6 +20,10 @@ import org.tessellation.dag.l1.domain.snapshot.programs.SnapshotProcessor._
 import org.tessellation.dag.l1.domain.snapshot.storage.LastGlobalSnapshotStorage
 import org.tessellation.dag.l1.domain.transaction.TransactionStorage
 import org.tessellation.dag.l1.domain.transaction.TransactionStorage.{LastTransactionReferenceState, Majority}
+import org.tessellation.dag.l1.infrastructure.block.storage.BlockIndexDbStorage
+import org.tessellation.dag.l1.infrastructure.block.storage.BlockIndexDbStorageSuite.dbConfig
+import org.tessellation.dag.l1.infrastructure.db.Database
+import org.tessellation.dag.l1.infrastructure.transaction.storage.TransactionIndexDbStorage
 import org.tessellation.dag.l1.{Main, TransactionGenerator}
 import org.tessellation.dag.snapshot._
 import org.tessellation.ext.cats.effect.ResourceIO
@@ -62,53 +67,57 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
 
   def testResources: Resource[IO, TestResources] =
     SecurityProvider.forAsync[IO].flatMap { implicit sp =>
-      KryoSerializer.forAsync[IO](Main.kryoRegistrar ++ sdkKryoRegistrar).flatMap { implicit kp =>
-        Random.scalaUtilRandom[IO].asResource.flatMap { implicit random =>
-          for {
-            balancesR <- Ref.of[IO, Map[Address, Balance]](Map.empty).asResource
-            blocksR <- MapRef.ofConcurrentHashMap[IO, ProofsHash, StoredBlock]().asResource
-            lastSnapR <- SignallingRef.of[IO, Option[Hashed[GlobalSnapshot]]](None).asResource
-            lastAccTxR <- MapRef.ofConcurrentHashMap[IO, Address, LastTransactionReferenceState]().asResource
-            waitingTxsR <- MapRef.ofConcurrentHashMap[IO, Address, NonEmptySet[Hashed[Transaction]]]().asResource
-            snapshotProcessor = {
-              val addressStorage = new AddressStorage[IO] {
-                def getBalance(address: Address): IO[balance.Balance] =
-                  balancesR.get.map(b => b(address))
+      KryoSerializer.forAsync[IO](Main.kryoRegistrar ++ sdkKryoRegistrar ++ dagSharedKryoRegistrar).flatMap {
+        implicit kp =>
+          Database.forAsync[IO](dbConfig).flatMap { implicit db =>
+            Random.scalaUtilRandom[IO].asResource.flatMap { implicit random =>
+              for {
+                balancesR <- Ref.of[IO, Map[Address, Balance]](Map.empty).asResource
+                blocksR <- MapRef.ofConcurrentHashMap[IO, ProofsHash, StoredBlock]().asResource
+                lastSnapR <- SignallingRef.of[IO, Option[Hashed[GlobalSnapshot]]](None).asResource
+                lastAccTxR <- MapRef.ofConcurrentHashMap[IO, Address, LastTransactionReferenceState]().asResource
+                waitingTxsR <- MapRef.ofConcurrentHashMap[IO, Address, NonEmptySet[Hashed[Transaction]]]().asResource
+                snapshotProcessor = {
+                  val addressStorage = new AddressStorage[IO] {
+                    def getBalance(address: Address): IO[balance.Balance] =
+                      balancesR.get.map(b => b(address))
 
-                def updateBalances(addressBalances: Map[Address, balance.Balance]): IO[Unit] =
-                  balancesR.set(addressBalances)
+                    def updateBalances(addressBalances: Map[Address, balance.Balance]): IO[Unit] =
+                      balancesR.set(addressBalances)
 
-                def clean: IO[Unit] = balancesR.set(Map.empty)
-              }
+                    def clean: IO[Unit] = balancesR.set(Map.empty)
+                  }
 
-              val blockStorage = new BlockStorage[IO](blocksR)
-              val lastGlobalSnapshotStorage = LastGlobalSnapshotStorage.make(lastSnapR)
-              val transactionStorage = new TransactionStorage[IO](lastAccTxR, waitingTxsR)
+                  val blockStorage = new BlockStorage[IO](blocksR)
+                  val lastGlobalSnapshotStorage =
+                    LastGlobalSnapshotStorage.make(lastSnapR, BlockIndexDbStorage.make, TransactionIndexDbStorage.make)
+                  val transactionStorage = new TransactionStorage[IO](lastAccTxR, waitingTxsR)
 
-              SnapshotProcessor
-                .make[IO](addressStorage, blockStorage, lastGlobalSnapshotStorage, transactionStorage)
+                  SnapshotProcessor
+                    .make[IO](addressStorage, blockStorage, lastGlobalSnapshotStorage, transactionStorage)
+                }
+                srcKey <- KeyPairGenerator.makeKeyPair[IO].asResource
+                dstKey <- KeyPairGenerator.makeKeyPair[IO].asResource
+                srcAddress = srcKey.getPublic.toAddress
+                dstAddress = dstKey.getPublic.toAddress
+                peerId = PeerId.fromId(srcKey.getPublic.toId)
+              } yield
+                (
+                  snapshotProcessor,
+                  sp,
+                  kp,
+                  srcKey,
+                  dstKey,
+                  srcAddress,
+                  dstAddress,
+                  peerId,
+                  balancesR,
+                  blocksR,
+                  lastSnapR,
+                  lastAccTxR
+                )
             }
-            srcKey <- KeyPairGenerator.makeKeyPair[IO].asResource
-            dstKey <- KeyPairGenerator.makeKeyPair[IO].asResource
-            srcAddress = srcKey.getPublic.toAddress
-            dstAddress = dstKey.getPublic.toAddress
-            peerId = PeerId.fromId(srcKey.getPublic.toId)
-          } yield
-            (
-              snapshotProcessor,
-              sp,
-              kp,
-              srcKey,
-              dstKey,
-              srcAddress,
-              dstAddress,
-              peerId,
-              balancesR,
-              blocksR,
-              lastSnapR,
-              lastAccTxR
-            )
-        }
+          }
       }
     }
 

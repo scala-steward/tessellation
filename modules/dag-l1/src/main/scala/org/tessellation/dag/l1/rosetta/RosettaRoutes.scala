@@ -29,25 +29,22 @@ import org.tessellation.kryo.KryoSerializer
 import org.tessellation.rosetta.server.model._
 import org.tessellation.rosetta.server.model.dag.decoders._
 import org.tessellation.rosetta.server.model.dag.schema._
-import org.tessellation.schema.address.{Address, DAGAddressRefined}
+import org.tessellation.schema.address.DAGAddressRefined
 import org.tessellation.schema.transaction.Transaction
-import org.tessellation.security.hash.Hash
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.key.ops.PublicKeyOps
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.signature.SignatureProof
 import org.tessellation.security.{Hashable, SecurityProvider}
 
-import eu.timepit.refined.types.all.PosLong
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import MockData.mockup
-import examples.proofs
 import SignatureProof._
-import Util.{getPublicKeyFromBytes, reduceListEither}
+import Util.{extractTransactions, getPublicKeyFromBytes, reduceListEither}
 
 /**
   * The data model for these routes was code-genned according to openapi spec using
@@ -173,7 +170,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
                   snapshot.hash.left
                     .map(e => errorMsg(0, f"Hash calculation on snapshot failure: ${e.getMessage}"))
                     .map { hash =>
-                      val extractedTransactions = extractTransactions(snapshot)
+                      val extractedTransactions = extractTransactionsRosetta(snapshot)
 
                       if (extractedTransactions.exists(_.isLeft))
                         errorMsg(0, "Internal transaction translation failure")
@@ -750,50 +747,12 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
       }
   }
 
-  def extractTransactions(snapshot: GlobalSnapshot) = {
-    import eu.timepit.refined.auto._
-    import org.tessellation.schema.transaction._
+  def extractTransactionsRosetta(snapshot: GlobalSnapshot) = {
+    val transactionLists = extractTransactions(snapshot)
 
-    val genesisTxs = if (snapshot.height.value.value == 0L) {
-      snapshot.info.balances.toList.map {
-        case (balanceAddress, balance) =>
-          // TODO: Empty transaction translator
-          Signed(
-            Transaction(
-              Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
-              balanceAddress,
-              TransactionAmount(PosLong.from(balance.value).toOption.get),
-              TransactionFee(0L),
-              TransactionReference(
-                TransactionOrdinal(0L),
-                Hash(examples.sampleHash)
-              ),
-              TransactionSalt(0L)
-            ),
-            proofs
-          )
-      }
-    } else List()
-
-    val blockTransactions = snapshot.blocks.toList
-      .flatMap(x => x.block.value.transactions.toNonEmptyList.toList)
-
-    val rewardTransactions = snapshot.rewards.toList.map { rw =>
-      Signed(
-        Transaction(
-          Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd"),
-          rw.destination,
-          rw.amount,
-          TransactionFee(0L),
-          TransactionReference(
-            TransactionOrdinal(0L),
-            Hash(examples.sampleHash)
-          ),
-          TransactionSalt(0L)
-        ),
-        proofs
-      )
-    }
+    val blockTransactions = transactionLists._1
+    val rewardTransactions = transactionLists._2
+    val genesisTxs = transactionLists._3
 
     blockTransactions.map(translateRosettaTransaction(_)) ++ (rewardTransactions ++ genesisTxs).map(
       translateRosettaTransaction(_, includeNegative = false)

@@ -11,7 +11,9 @@ import org.tessellation.dag.l1.domain.consensus.block.storage.ConsensusStorage
 import org.tessellation.dag.l1.domain.snapshot.storage.LastGlobalSnapshotStorage
 import org.tessellation.dag.l1.domain.transaction.TransactionStorage
 import org.tessellation.dag.l1.infrastructure.address.storage.AddressStorage
+import org.tessellation.dag.l1.infrastructure.block.storage.BlockIndexDbStorage
 import org.tessellation.dag.l1.infrastructure.db.Database
+import org.tessellation.dag.l1.infrastructure.transaction.storage.TransactionIndexDbStorage
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.peer.L0Peer
 import org.tessellation.sdk.domain.cluster.storage.{ClusterStorage, L0ClusterStorage, SessionStorage}
@@ -31,8 +33,9 @@ object Storages {
       blockStorage <- BlockStorage.make[F]
       consensusStorage <- ConsensusStorage.make[F]
       l0ClusterStorage <- L0ClusterStorage.make[F](l0Peer)
-      lastGlobalSnapshotStorage <- LastGlobalSnapshotStorage.make[F]
       transactionStorage <- TransactionStorage.make[F]
+      lastGlobalSnapshotStorage <- LastGlobalSnapshotStorage
+        .make[F](BlockIndexDbStorage.make[F], TransactionIndexDbStorage.make[F])
       addressStorage = AddressStorage.make[F]
     } yield
       new Storages[F](

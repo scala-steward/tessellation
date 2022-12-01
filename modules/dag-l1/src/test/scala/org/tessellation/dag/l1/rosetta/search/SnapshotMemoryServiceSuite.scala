@@ -6,6 +6,10 @@ import cats.effect.{IO, Resource}
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import org.tessellation.dag.l1.domain.snapshot.storage.LastGlobalSnapshotStorage
+import org.tessellation.dag.l1.infrastructure.block.storage.BlockIndexDbStorage
+import org.tessellation.dag.l1.infrastructure.block.storage.BlockIndexDbStorageSuite.dbConfig
+import org.tessellation.dag.l1.infrastructure.db.Database
+import org.tessellation.dag.l1.infrastructure.transaction.storage.TransactionIndexDbStorage
 import org.tessellation.dag.l1.{Main, TransactionGenerator}
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.cats.effect.ResourceIO
@@ -35,7 +39,12 @@ object SnapshotMemoryServiceSuite extends SimpleIOSuite with TransactionGenerato
   def testResources: Resource[IO, TestResources] =
     SecurityProvider.forAsync[IO].flatMap { implicit sp =>
       KryoSerializer.forAsync[IO](Main.kryoRegistrar ++ sdkKryoRegistrar).flatMap { implicit kp =>
-        LastGlobalSnapshotStorage.make.map(store => (sp, kp, store)).asResource
+        Database.forAsync[IO](dbConfig).flatMap { implicit db =>
+          LastGlobalSnapshotStorage
+            .make(BlockIndexDbStorage.make, TransactionIndexDbStorage.make)
+            .map(store => (sp, kp, store))
+            .asResource
+        }
       }
     }
 

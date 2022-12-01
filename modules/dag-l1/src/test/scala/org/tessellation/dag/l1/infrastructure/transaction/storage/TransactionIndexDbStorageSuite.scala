@@ -1,17 +1,31 @@
 package org.tessellation.dag.l1.infrastructure.transaction.storage
 
+import cats.data.NonEmptyList
 import cats.effect.{IO, Resource}
 
+import scala.collection.immutable.{SortedMap, SortedSet}
+
+import org.tessellation.dag.l1.Main
 import org.tessellation.dag.l1.config.types.DBConfig
 import org.tessellation.dag.l1.domain.transaction.storage.TransactionIndexStorage
 import org.tessellation.dag.l1.infrastructure.db.Database
 import org.tessellation.dag.l1.infrastructure.transaction.storage.SignedTransactionGenerator.signedTransactionGen
 import org.tessellation.dag.l1.rosetta.model.network.NetworkStatus
+import org.tessellation.dag.snapshot.GlobalSnapshot
+import org.tessellation.ext.cats.effect.ResourceIO
+import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.ext.crypto.RefinedHashable
 import org.tessellation.ext.kryo.KryoRegistrationId
+import org.tessellation.keytool.KeyPairGenerator
 import org.tessellation.kryo.KryoSerializer
-import org.tessellation.schema.height.Height
+import org.tessellation.schema.address.Address
+import org.tessellation.schema.balance.Balance
+import org.tessellation.schema.height.{Height, SubHeight}
+import org.tessellation.schema.peer.PeerId
 import org.tessellation.schema.transaction.{Transaction, TransactionReference}
+import org.tessellation.sdk.sdkKryoRegistrar
+import org.tessellation.security.SecurityProvider
+import org.tessellation.security.hex.Hex
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.signature.SignatureProof
 
@@ -30,6 +44,7 @@ import weaver.scalacheck.Checkers
 object TransactionIndexDbStorageSuite extends SimpleIOSuite with Checkers {
   val arbitraryNetworkStatus = Gen.oneOf(NetworkStatus.accepted, NetworkStatus.canceled, NetworkStatus.reverted)
   val arbitraryNonNegLong = arbitrary[Long Refined NonNegative]
+  val snapshotAddress = Address("DAG2EUdecqFwEGcgAcH1ac2wrsg8acrgGwrQabcd")
 
   val generateData = for {
     height <- arbitraryNonNegLong.map(Height(_))
@@ -48,13 +63,39 @@ object TransactionIndexDbStorageSuite extends SimpleIOSuite with Checkers {
     classOf[TransactionReference] -> 395
   )
 
-  val kryoSerializer = KryoSerializer.forAsync[IO](kryoRegistrar)
+  val kryoSerializer = KryoSerializer.forAsync[IO](kryoRegistrar ++ Main.kryoRegistrar ++ sdkKryoRegistrar)
 
   val dbConfig = DBConfig("org.sqlite.JDBC", "jdbc:sqlite::memory:", "sa", Secret(""))
 
   def testResource: Resource[IO, (TransactionIndexStorage[IO], KryoSerializer[IO])] =
     Database.forAsync[IO](dbConfig).flatMap { implicit db =>
       kryoSerializer.map(implicit kryo => (TransactionIndexDbStorage.make[IO], kryo))
+    }
+
+  def mkSnapshots(
+    implicit K: KryoSerializer[IO],
+    S: SecurityProvider[IO]
+  ): IO[(Signed[GlobalSnapshot], Signed[GlobalSnapshot])] =
+    KeyPairGenerator.makeKeyPair[IO].flatMap { keyPair =>
+      Signed
+        .forAsyncKryo[IO, GlobalSnapshot](GlobalSnapshot.mkGenesis(Map(snapshotAddress -> Balance(10L))), keyPair)
+        .flatMap { genesis =>
+          def snapshot =
+            GlobalSnapshot(
+              genesis.value.ordinal.next,
+              Height.MinValue,
+              SubHeight.MinValue,
+              genesis.value.hash.toOption.get,
+              SortedSet.empty,
+              SortedMap.empty,
+              SortedSet.empty,
+              NonEmptyList.of(PeerId(Hex("peer1"))),
+              genesis.info,
+              genesis.tips
+            )
+
+          Signed.forAsyncKryo[IO, GlobalSnapshot](snapshot, keyPair).map((genesis, _))
+        }
     }
 
   test("Test writing transaction index values to the database - get transaction index values by height") {
@@ -1490,6 +1531,43 @@ object TransactionIndexDbStorageSuite extends SimpleIOSuite with Checkers {
             )
             .getOrElse(IO.pure(expect(false)))
       }
+    }
+  }
+
+  test("Test index global snapshot to the database - get transaction index values by address") {
+    testResource.use {
+      case (transactionStorage, kryo) =>
+        val snapshotResource: Resource[IO, (SecurityProvider[IO], KryoSerializer[IO])] =
+          SecurityProvider.forAsync[IO].flatMap { implicit sp =>
+            IO.pure((sp, kryo)).asResource
+          }
+
+        snapshotResource.use {
+          case (securityProvider, kryoSerializer) =>
+            implicit val implicitSp = securityProvider
+            implicit val implicitKryo = kryoSerializer
+
+            mkSnapshots.flatMap {
+              case (snapshot, _) =>
+                transactionStorage.indexGlobalSnapshotTransactions(snapshot) >>
+                  transactionStorage
+                    .getTransactionIndexValuesAnd(None, Some(snapshotAddress), None, None, None, None)
+                    .map(
+                      _.map(
+                        transactions =>
+                          expect.all(
+                            transactions.length == 1,
+                            transactions.forall(
+                              singleTransaction =>
+                                singleTransaction.signedTransaction.source == snapshotAddress || singleTransaction.signedTransaction.destination == snapshotAddress
+                            )
+                          )
+                      )
+                    )
+                    .toOption
+                    .getOrElse(IO.pure(expect(false)))
+            }
+        }
     }
   }
 }

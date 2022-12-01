@@ -1,5 +1,6 @@
 package org.tessellation.dag.l1.infrastructure.block.storage
 
+import cats.Applicative
 import cats.effect.MonadCancelThrow
 import cats.syntax.functor._
 import cats.syntax.traverse._
@@ -7,6 +8,7 @@ import cats.syntax.traverse._
 import org.tessellation.dag.l1.domain.block.storage.{BlockIndexEntry, BlockIndexStorage, StoredBlockIndex}
 import org.tessellation.dag.l1.infrastructure.db.Database
 import org.tessellation.dag.snapshot.GlobalSnapshot
+import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.signature.Signed
@@ -70,6 +72,19 @@ object BlockIndexDbStorage {
               .transact(xa)
               .as(())
         }.map(_.reduce((y, _) => y))
+
+      def indexGlobalSnapshot(signedGlobalSnapshot: Signed[GlobalSnapshot]) =
+        signedGlobalSnapshot.hash.toOption
+          .flatMap(
+            hash =>
+              KryoSerializer[F]
+                .serialize(signedGlobalSnapshot)
+                .map(
+                  bytes => updateStoredBlockIndexValues(Map(hash -> (signedGlobalSnapshot.height.value.value, bytes)))
+                )
+                .toOption
+          )
+          .getOrElse(Applicative[F].pure(()))
 
       def getStoredBlockIndexValue(hash: Option[Hash], index: Option[Long]) = {
         val queryResult = run(getStoredBlockIndexByHashIndexOrLastTransaction(lift(hash), lift(index)))
