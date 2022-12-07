@@ -39,6 +39,7 @@ import org.tessellation.security.{Hashable, SecurityProvider}
 
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
+import org.http4s.server.Router
 import org.http4s.{HttpRoutes, Response}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -62,6 +63,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
   val blockIndexClient: BlockIndexClient[F],
   val l1Client: L1Client[F]
 ) extends Http4sDsl[F] {
+  val prefixPath = "/rosetta"
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -760,5 +762,9 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
   }
 
   val allRoutes: HttpRoutes[F] = testRoutes <+> routes
+
+  val prefixedAllRoutes: HttpRoutes[F] = Router(
+    prefixPath -> allRoutes
+  )
 
 }

@@ -97,4 +97,6 @@ sealed abstract class HttpApi[F[_]: Async: KryoSerializer: SecurityProvider: Met
   val p2pApp: HttpApp[F] = loggers(p2pRoutes.orNotFound)
   val cliApp: HttpApp[F] = loggers(cliRoutes.orNotFound)
 
+  def augmentedApp(additionalRoutes: HttpRoutes[F]): HttpApp[F] = loggers((openRoutes <+> additionalRoutes).orNotFound)
+
 }
