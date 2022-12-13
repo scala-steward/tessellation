@@ -55,7 +55,7 @@ object RosettaL1Client {
                 case (genesisSnapshotHash, genesisSnapshot) =>
                   NetworkStatusResponse(
                     BlockIdentifier(currentSnapshot.ordinal.value.value, currentSnapshotHash.value),
-                    currentSnapshot.ordinal.value.value,
+                    999L, // System.currentTimeMillis(),
                     BlockIdentifier(genesisSnapshot.ordinal.value.value, genesisSnapshotHash.value),
                     Some(BlockIdentifier(genesisSnapshot.ordinal.value.value, genesisSnapshotHash.value)),
                     Some(

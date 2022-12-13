@@ -69,7 +69,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
 
   private val testRoutes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "test" =>
-      Ok("test")
+      Ok("testChanged")
   }
 
   def error(code: Int, retriable: Boolean = true, details: Option[ErrorDetails] = None): F[Response[F]] =
@@ -693,6 +693,7 @@ final case class RosettaRoutes[F[_]: Async: KryoSerializer: SecurityProvider](
               status <- statusF.left
                 .map(err => errorMsg(0, err))
             } yield {
+              println(status.currentBlockTimestamp)
               Ok(status)
             }
             response.merge

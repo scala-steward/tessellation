@@ -11,7 +11,7 @@ https://github.com/coinbase/rosetta-ethereum/blob/master/rosetta-cli-conf/testne
 
 1. Modify the rosetta configuration file (i.e., `testnet/rosetta.conf`) to point to server or server instances (e.g.,
 the instances started by `skaffold`.) If you are running `skaffold` locally and will be running the Docker image with
-bridge networking, the server will be at: `http://host.docker.internal:9100`. Make sure to set both `"online_url"` and
+bridge networking, the server will be at: `http://host.docker.internal:9100/rosetta`. Make sure to set both `"online_url"` and
 `"construction": {"offline_url": }`
 2. From the same directory as the Dockerfile (i.e., `rosetta`), build the Docker image. You can run the build script
 (i.e., `build.sh`) to do this.
