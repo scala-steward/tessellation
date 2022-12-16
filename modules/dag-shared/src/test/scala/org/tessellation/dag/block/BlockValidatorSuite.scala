@@ -40,11 +40,11 @@ object BlockValidatorSuite extends MutableIOSuite with Checkers {
       SecurityProvider.forAsync[IO].map((ks, _))
     }
 
-  private def makeValidator[G[_]: Async: KryoSerializer: SecurityProvider]: BlockValidator[G] = {
+  private def makeValidator[G[_]: Async: KryoSerializer: SecurityProvider]: BlockValidator[G, DAGTransaction, DAGBlock] = {
     val signedValidator = SignedValidator.make[G]
-    val transactionChainValidator = TransactionChainValidator.make[G]
-    val transactionValidator = TransactionValidator.make[G](signedValidator)
-    BlockValidator.make[G](signedValidator, transactionChainValidator, transactionValidator)
+    val transactionChainValidator = TransactionChainValidator.make[G, DAGTransaction]
+    val transactionValidator = TransactionValidator.make[G, DAGTransaction](signedValidator)
+    BlockValidator.make[G, DAGTransaction, DAGBlock](signedValidator, transactionChainValidator, transactionValidator)
   }
 
   private def generateKeys[G[_]: Async: SecurityProvider](count: PosInt): G[NonEmptyList[KeyPair]] =
@@ -63,8 +63,8 @@ object BlockValidatorSuite extends MutableIOSuite with Checkers {
       src = keys.head.getPublic.toAddress
       dst = keys.toList(1).getPublic.toAddress
       tx <- Signed
-        .forAsyncKryo[IO, Transaction](
-          Transaction(
+        .forAsyncKryo[IO, DAGTransaction](
+          DAGTransaction(
             src,
             dst,
             TransactionAmount(1L),

@@ -10,10 +10,12 @@ import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.syntax.show._
 import cats.syntax.traverse._
+import cats.{Eq, Order}
 
 import org.tessellation.dag.block.BlockValidator
-import org.tessellation.dag.domain.block.{BlockReference, DAGBlock}
+import org.tessellation.dag.domain.block.{Block, BlockReference}
 import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.SecurityProvider
 import org.tessellation.security.signature.Signed
 
@@ -22,15 +24,15 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-trait BlockAcceptanceManager[F[_]] {
+trait BlockAcceptanceManager[F[_], A <: Transaction, B <: Block[A]] {
 
   def acceptBlocksIteratively(
-    blocks: List[Signed[DAGBlock]],
+    blocks: List[Signed[B]],
     context: BlockAcceptanceContext[F]
-  ): F[BlockAcceptanceResult]
+  )(implicit order: Order[B]): F[BlockAcceptanceResult[A, B]]
 
   def acceptBlock(
-    block: Signed[DAGBlock],
+    block: Signed[B],
     context: BlockAcceptanceContext[F]
   ): F[Either[BlockNotAcceptedReason, (BlockAcceptanceContextUpdate, UsageCount)]]
 
@@ -38,28 +40,29 @@ trait BlockAcceptanceManager[F[_]] {
 
 object BlockAcceptanceManager {
 
-  def make[F[_]: Async: KryoSerializer: SecurityProvider](
-    blockValidator: BlockValidator[F]
-  ): BlockAcceptanceManager[F] = make(BlockAcceptanceLogic.make[F], blockValidator)
+  def make[F[_]: Async: KryoSerializer: SecurityProvider, A <: Transaction: Eq, B <: Block[A]: Ordering: Eq](
+    blockValidator: BlockValidator[F, A, B]
+  )(implicit foo: Eq[BlockAcceptanceState[A, B]]): BlockAcceptanceManager[F, A, B] =
+    make(BlockAcceptanceLogic.make[F, A, B], blockValidator)
 
-  def make[F[_]: Async: KryoSerializer](
-    logic: BlockAcceptanceLogic[F],
-    blockValidator: BlockValidator[F]
-  ): BlockAcceptanceManager[F] =
-    new BlockAcceptanceManager[F] {
+  def make[F[_]: Async: KryoSerializer, A <: Transaction: Eq, B <: Block[A]: Ordering: Eq](
+    logic: BlockAcceptanceLogic[F, A, B],
+    blockValidator: BlockValidator[F, A, B]
+  )(implicit foo: Eq[BlockAcceptanceState[A, B]]): BlockAcceptanceManager[F, A, B] =
+    new BlockAcceptanceManager[F, A, B] {
       private val logger = Slf4jLogger.getLoggerFromClass[F](BlockAcceptanceManager.getClass)
 
       def acceptBlocksIteratively(
-        blocks: List[Signed[DAGBlock]],
+        blocks: List[Signed[B]],
         context: BlockAcceptanceContext[F]
-      ): F[BlockAcceptanceResult] = {
+      )(implicit o: Order[B]): F[BlockAcceptanceResult[A, B]] = {
 
         def go(
-          initState: BlockAcceptanceState,
-          toProcess: List[(Signed[DAGBlock], TxChains)]
-        ): F[BlockAcceptanceState] =
+          initState: BlockAcceptanceState[A, B],
+          toProcess: List[(Signed[B], TxChains[A])]
+        ): F[BlockAcceptanceState[A, B]] =
           for {
-            currState <- toProcess.foldLeftM(initState.copy(awaiting = List.empty)) { (acc, blockAndTxChains) =>
+            currState <- toProcess.foldLeftM(initState.copy[A, B](awaiting = List.empty)) { (acc, blockAndTxChains) =>
               blockAndTxChains match {
                 case (block, txChains) =>
                   logic
@@ -91,7 +94,7 @@ object BlockAcceptanceManager {
           } yield result
 
         blocks.sorted
-          .foldLeftM((List.empty[(Signed[DAGBlock], TxChains)], List.empty[(Signed[DAGBlock], ValidationFailed)])) { (acc, block) =>
+          .foldLeftM((List.empty[(Signed[B], TxChains[A])], List.empty[(Signed[B], ValidationFailed)])) { (acc, block) =>
             acc match {
               case (validList, invalidList) =>
                 blockValidator.validate(block).map {
@@ -103,7 +106,7 @@ object BlockAcceptanceManager {
           }
           .flatMap {
             case (validList, invalidList) =>
-              go(BlockAcceptanceState.withRejectedBlocks(invalidList), validList)
+              go(BlockAcceptanceState.withRejectedBlocks[A, B](invalidList), validList)
                 .map(_.toBlockAcceptanceResult)
                 .flatTap { result =>
                   result.accepted.traverse(logAcceptedBlock) >>
@@ -113,7 +116,7 @@ object BlockAcceptanceManager {
       }
 
       def acceptBlock(
-        block: Signed[DAGBlock],
+        block: Signed[B],
         context: BlockAcceptanceContext[F]
       ): F[Either[BlockNotAcceptedReason, (BlockAcceptanceContextUpdate, NonNegLong)]] =
         blockValidator.validate(block).flatMap {
@@ -128,16 +131,16 @@ object BlockAcceptanceManager {
             .value
         }
 
-      private def logAcceptedBlock(tuple: (Signed[DAGBlock], NonNegLong)): F[Unit] = {
+      private def logAcceptedBlock(tuple: (Signed[B], NonNegLong)): F[Unit] = {
         val (signedBlock, blockUsages) = tuple
-        BlockReference.of(signedBlock).flatMap { blockRef =>
+        BlockReference.of[F, A, B](signedBlock).flatMap { blockRef =>
           logger.info(s"Accepted block: ${blockRef.show}, usages: ${blockUsages.show}")
         }
       }
 
-      private def logNotAcceptedBlock(tuple: (Signed[DAGBlock], BlockNotAcceptedReason)): F[Unit] = {
+      private def logNotAcceptedBlock(tuple: (Signed[B], BlockNotAcceptedReason)): F[Unit] = {
         val (signedBlock, reason) = tuple
-        BlockReference.of(signedBlock).flatMap { blockRef =>
+        BlockReference.of[F, A, B](signedBlock).flatMap { blockRef =>
           reason match {
             case reason: BlockRejectionReason =>
               logger.info(s"Rejected block: ${blockRef.show}, reason: ${reason.show}")

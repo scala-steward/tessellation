@@ -21,14 +21,14 @@ import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.height.Height
 import org.tessellation.schema.peer.PeerId
-import org.tessellation.schema.transaction.{TransactionFee, TransactionReference}
+import org.tessellation.schema.transaction.{DAGTransaction, TransactionFee, TransactionReference}
 import org.tessellation.sdk.sdkKryoRegistrar
 import org.tessellation.security.SecurityProvider
 import org.tessellation.security.hash.ProofsHash
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.key.ops.PublicKeyOps
-import org.tessellation.security.signature.SignedValidator
 import org.tessellation.security.signature.signature.SignatureProof
+import org.tessellation.security.signature.{Signed, SignedValidator}
 
 import eu.timepit.refined.auto._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -37,7 +37,8 @@ import weaver.scalacheck.Checkers
 
 object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenerator {
 
-  override type Res = (KryoSerializer[IO], SecurityProvider[IO], KeyPair, KeyPair, Address, Address, TransactionValidator[IO])
+  override type Res =
+    (KryoSerializer[IO], SecurityProvider[IO], KeyPair, KeyPair, Address, Address, TransactionValidator[IO, DAGTransaction])
 
   override def sharedResource: Resource[IO, Res] =
     KryoSerializer.forAsync[IO](Main.kryoRegistrar ++ sdkKryoRegistrar).flatMap { implicit kp =>
@@ -48,7 +49,7 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
           srcAddress = srcKey.getPublic.toAddress
           dstAddress = dstKey.getPublic.toAddress
           signedValidator = SignedValidator.make
-          txValidator = TransactionValidator.make(signedValidator)
+          txValidator = TransactionValidator.make[IO, DAGTransaction](signedValidator)
         } yield (kp, sp, srcKey, dstKey, srcAddress, dstAddress, txValidator)
       }
     }
@@ -60,10 +61,10 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
   val peerIdB = PeerId(Hex("peerB"))
   val peerIdC = PeerId(Hex("peerC"))
   val tips = Tips(NonEmptyList.of(BlockReference(Height(1L), ProofsHash("0000"))))
-  val baseProposal = Proposal(roundId, peerIdA, peerIdA, Set.empty, Set.empty, tips)
+  val baseProposal = Proposal(roundId, peerIdA, peerIdA, Set.empty, Set.empty[Signed[DAGTransaction]], tips)
 
   val baseRoundData =
-    RoundData(
+    RoundData[DAGTransaction, DAGBlock](
       roundId,
       FiniteDuration(1000L, TimeUnit.MINUTES),
       Set.empty,
@@ -74,7 +75,8 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
       Map.empty,
       Map.empty,
       Map.empty,
-      tips
+      tips,
+      (foo, bar) => Some(DAGBlock(foo, bar))
     )
 
   test("formBlock should return None when there were no transactions in RoundData") {
@@ -98,7 +100,7 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
           ownProposal = baseRoundData.ownProposal.copy(transactions = txsA.toList.map(_.signed).toSet),
           peerProposals = Map(
             peerIdB -> baseProposal.copy(senderId = peerIdB, transactions = txsA2.toList.map(_.signed).toSet),
-            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty)
+            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty[Signed[DAGTransaction]])
           )
         )
         result <- roundData.formBlock(txValidator)
@@ -122,7 +124,7 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
           ownProposal = baseRoundData.ownProposal.copy(transactions = txsA.toList.map(_.signed).toSet),
           peerProposals = Map(
             peerIdB -> baseProposal.copy(senderId = peerIdB, transactions = txsA2.toList.map(_.signed).toSet),
-            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty)
+            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty[Signed[DAGTransaction]])
           )
         )
         result <- roundData.formBlock(txValidator)
@@ -146,7 +148,7 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
           ownProposal = baseRoundData.ownProposal.copy(transactions = txsA.toList.map(_.signed).toSet),
           peerProposals = Map(
             peerIdB -> baseProposal.copy(senderId = peerIdB, transactions = txsA2.toList.map(_.signed).toSet),
-            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty)
+            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty[Signed[DAGTransaction]])
           )
         )
         result <- roundData.formBlock(txValidator)
@@ -170,8 +172,8 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
         roundData = baseRoundData.copy(
           ownProposal = baseRoundData.ownProposal.copy(transactions = txs),
           peerProposals = Map(
-            peerIdB -> baseProposal.copy(senderId = peerIdB, transactions = Set.empty),
-            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty)
+            peerIdB -> baseProposal.copy(senderId = peerIdB, transactions = Set.empty[Signed[DAGTransaction]]),
+            peerIdC -> baseProposal.copy(senderId = peerIdC, transactions = Set.empty[Signed[DAGTransaction]])
           )
         )
         result <- roundData.formBlock(txValidator)

@@ -6,6 +6,7 @@ import cats.syntax.functor._
 import org.tessellation.ext.derevo.ordering
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.height.Height
+import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.hash.ProofsHash
 import org.tessellation.security.signature.Signed
 
@@ -19,7 +20,7 @@ case class BlockReference(height: Height, hash: ProofsHash)
 
 object BlockReference {
 
-  def of[F[_]: Async: KryoSerializer](block: Signed[DAGBlock]): F[BlockReference] =
+  def of[F[_]: Async: KryoSerializer, A <: Transaction, B <: Block[A]](block: Signed[B]): F[BlockReference] =
     block.proofsHash.map(BlockReference(block.height, _))
 
 }

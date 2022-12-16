@@ -9,7 +9,7 @@ import org.tessellation.dag.domain.block.{BlockReference, DAGBlock}
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.{Amount, Balance}
 import org.tessellation.schema.peer.PeerId
-import org.tessellation.schema.transaction.TransactionReference
+import org.tessellation.schema.transaction.{DAGTransaction, TransactionReference}
 import org.tessellation.security.SecurityProvider
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.signature.Signed
@@ -64,7 +64,7 @@ object BlockAcceptanceLogicSuite extends MutableIOSuite with Checkers {
   test("accept block with signers with collateral") { implicit sc =>
     forall(dagBlockWithSigningPeer(Seq(peer1))) { block =>
       BlockAcceptanceLogic
-        .processSignatures[IO](block, mkContext(Balance(250_000L)))
+        .processSignatures[IO, DAGTransaction, DAGBlock](block, mkContext(Balance(250_000L)))
         .value
         .map(expect.same(_, Right(())))
     }
@@ -73,7 +73,7 @@ object BlockAcceptanceLogicSuite extends MutableIOSuite with Checkers {
   test("reject block with signers without collateral") { implicit sc =>
     forall(dagBlockWithSigningPeer(Seq(peer1))) { block =>
       BlockAcceptanceLogic
-        .processSignatures[IO](block, mkContext(Balance(249_999L)))
+        .processSignatures[IO, DAGTransaction, DAGBlock](block, mkContext(Balance(249_999L)))
         .value
         .map(expect.same(_, Left(SigningPeerBelowCollateral(NonEmptyList.of(address1)))))
     }
@@ -82,7 +82,7 @@ object BlockAcceptanceLogicSuite extends MutableIOSuite with Checkers {
   test("reject block with signers without balance") { implicit sc =>
     forall(dagBlockWithSigningPeer(Seq(peerWithoutBalance))) { block =>
       BlockAcceptanceLogic
-        .processSignatures[IO](block, mkContext(Balance(250_000L)))
+        .processSignatures[IO, DAGTransaction, DAGBlock](block, mkContext(Balance(250_000L)))
         .value
         .map(expect.same(_, Left(SigningPeerBelowCollateral(NonEmptyList.of(addressWithoutBalance)))))
     }
@@ -91,7 +91,7 @@ object BlockAcceptanceLogicSuite extends MutableIOSuite with Checkers {
   test("accept block with signers without balance when collateral is 0") { implicit sc =>
     forall(dagBlockWithSigningPeer(Seq(peer1))) { block =>
       BlockAcceptanceLogic
-        .processSignatures[IO](block, mkContext(Balance(250_000L), Amount(0L)))
+        .processSignatures[IO, DAGTransaction, DAGBlock](block, mkContext(Balance(250_000L), Amount(0L)))
         .value
         .map(expect.same(_, Right(())))
     }

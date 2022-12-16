@@ -233,7 +233,7 @@ object Main
   }
 
   def postTransaction[F[_]: Async](client: Client[F], baseUrl: UrlString)(
-    tx: Signed[Transaction]
+    tx: Signed[DAGTransaction]
   ): F[Unit] = {
     val target = Uri.unsafeFromString(baseUrl.toString).addPath("transactions")
     val req = Request[F](method = Method.POST, uri = target).withEntity(tx)

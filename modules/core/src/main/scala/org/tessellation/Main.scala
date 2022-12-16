@@ -8,6 +8,7 @@ import cats.syntax.semigroupk._
 
 import org.tessellation.cli.method._
 import org.tessellation.dag._
+import org.tessellation.dag.domain.block.DAGBlock
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.cats.effect._
 import org.tessellation.ext.kryo._
@@ -17,6 +18,7 @@ import org.tessellation.infrastructure.trust.handler.trustHandler
 import org.tessellation.modules._
 import org.tessellation.schema.cluster.ClusterId
 import org.tessellation.schema.node.NodeState
+import org.tessellation.schema.transaction.DAGTransaction
 import org.tessellation.sdk.app.{SDK, TessellationIOApp}
 import org.tessellation.sdk.infrastructure.gossip.{GossipDaemon, RumorHandlers}
 import org.tessellation.sdk.resources.MkHttpServer
@@ -53,7 +55,7 @@ object Main
       queues <- Queues.make[IO](sdkQueues).asResource
       maybeRollbackHash = Option(method).collect { case rr: RunRollback => rr.rollbackHash }
       storages <- Storages.make[IO](sdkStorages, cfg.snapshot, maybeRollbackHash).asResource
-      validators = Validators.make[IO](seedlist)
+      validators = Validators.make[IO, DAGTransaction, DAGBlock](seedlist)
       services <- Services
         .make[IO](
           sdkServices,

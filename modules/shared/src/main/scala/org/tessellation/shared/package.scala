@@ -10,7 +10,7 @@ import org.tessellation.schema.address.{Address, AddressCache}
 import org.tessellation.schema.gossip._
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.peer.SignRequest
-import org.tessellation.schema.transaction.{RewardTransaction, Transaction, TransactionReference}
+import org.tessellation.schema.transaction._
 import org.tessellation.schema.trust.PublicTrust
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.Signed.SignedOrdering
@@ -52,15 +52,17 @@ package object shared {
     classOf[PublicTrust] -> 326,
     classOf[Ordinal] -> 327,
     classOf[CommonRumorRaw] -> 328,
-    classOf[Transaction] -> 329,
-    Transaction.OrderingInstance.getClass -> 330,
+    classOf[DAGTransaction] -> 329,
+    DAGTransaction.OrderingInstance.getClass -> 330,
     classOf[TransactionReference] -> 331,
     classOf[Refined[_, _]] -> 332,
     classOf[RewardTransaction] -> 333,
     RewardTransaction.OrderingInstance.getClass -> 334,
     classOf[SignedOrdering[_]] -> 335,
     Address.OrderingInstance.getClass -> 336,
-    NodeState.Observing.getClass -> 337
+    NodeState.Observing.getClass -> 337,
+    classOf[CurrencyTransaction] -> 338,
+    CurrencyTransaction.OrderingInstance.getClass -> 339
   )
 
 }

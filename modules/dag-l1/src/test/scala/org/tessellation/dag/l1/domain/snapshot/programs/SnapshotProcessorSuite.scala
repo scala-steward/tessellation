@@ -49,7 +49,7 @@ import weaver.SimpleIOSuite
 object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
 
   type TestResources = (
-    SnapshotProcessor[IO],
+    SnapshotProcessor[IO, DAGTransaction, DAGBlock, GlobalSnapshot],
     SecurityProvider[IO],
     KryoSerializer[IO],
     KeyPair,
@@ -58,7 +58,7 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
     Address,
     PeerId,
     Ref[IO, Map[Address, Balance]],
-    MapRef[IO, ProofsHash, Option[StoredBlock]],
+    MapRef[IO, ProofsHash, Option[StoredBlock[DAGTransaction, DAGBlock]]],
     Ref[IO, Option[Hashed[GlobalSnapshot]]],
     MapRef[IO, Address, Option[LastTransactionReferenceState]]
   )
@@ -69,10 +69,10 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
         Random.scalaUtilRandom[IO].asResource.flatMap { implicit random =>
           for {
             balancesR <- Ref.of[IO, Map[Address, Balance]](Map.empty).asResource
-            blocksR <- MapRef.ofConcurrentHashMap[IO, ProofsHash, StoredBlock]().asResource
+            blocksR <- MapRef.ofConcurrentHashMap[IO, ProofsHash, StoredBlock[DAGTransaction, DAGBlock]]().asResource
             lastSnapR <- SignallingRef.of[IO, Option[Hashed[GlobalSnapshot]]](None).asResource
             lastAccTxR <- MapRef.ofConcurrentHashMap[IO, Address, LastTransactionReferenceState]().asResource
-            waitingTxsR <- MapRef.ofConcurrentHashMap[IO, Address, NonEmptySet[Hashed[Transaction]]]().asResource
+            waitingTxsR <- MapRef.ofConcurrentHashMap[IO, Address, NonEmptySet[Hashed[DAGTransaction]]]().asResource
             snapshotProcessor = {
               val addressStorage = new AddressStorage[IO] {
                 def getBalance(address: Address): IO[balance.Balance] =
@@ -84,11 +84,11 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
                 def clean: IO[Unit] = balancesR.set(Map.empty)
               }
 
-              val blockStorage = new BlockStorage[IO](blocksR)
+              val blockStorage = new BlockStorage[IO, DAGTransaction, DAGBlock](blocksR)
               val lastGlobalSnapshotStorage = LastGlobalSnapshotStorage.make(lastSnapR)
-              val transactionStorage = new TransactionStorage[IO](lastAccTxR, waitingTxsR)
+              val transactionStorage = new TransactionStorage[IO, DAGTransaction](lastAccTxR, waitingTxsR)
 
-              SnapshotProcessor
+              DAGSnapshotProcessor
                 .make[IO](addressStorage, blockStorage, lastGlobalSnapshotStorage, transactionStorage)
             }
             srcKey <- KeyPairGenerator.makeKeyPair[IO].asResource
@@ -341,12 +341,12 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
           ).flatMap(_.toHashedWithSignatureCheck.map(_.toOption.get))
 
           // Inserting blocks in required state
-          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock(hashedBlocks.head.signed).some)
-          _ <- blocksR(hashedBlocks(1).proofsHash).set(WaitingBlock(hashedBlocks(1).signed).some)
-          _ <- blocksR(hashedBlocks(2).proofsHash).set(WaitingBlock(hashedBlocks(2).signed).some)
-          _ <- blocksR(hashedBlocks(3).proofsHash).set(WaitingBlock(hashedBlocks(3).signed).some)
-          _ <- blocksR(hashedBlocks(4).proofsHash).set(WaitingBlock(hashedBlocks(4).signed).some)
-          _ <- blocksR(hashedBlocks(5).proofsHash).set(WaitingBlock(hashedBlocks(5).signed).some)
+          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks.head.signed).some)
+          _ <- blocksR(hashedBlocks(1).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(1).signed).some)
+          _ <- blocksR(hashedBlocks(2).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(2).signed).some)
+          _ <- blocksR(hashedBlocks(3).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(3).signed).some)
+          _ <- blocksR(hashedBlocks(4).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(4).signed).some)
+          _ <- blocksR(hashedBlocks(5).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(5).signed).some)
 
           processingResult <- snapshotProcessor.process(hashedSnapshot)
 
@@ -371,29 +371,29 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
                 Set(hashedBlocks(1).proofsHash)
               ),
               Map(
-                hashedBlocks.head.proofsHash -> WaitingBlock(hashedBlocks.head.signed),
-                hashedBlocks(2).proofsHash -> MajorityBlock(
+                hashedBlocks.head.proofsHash -> WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks.head.signed),
+                hashedBlocks(2).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(2).height, hashedBlocks(2).proofsHash),
                   NonNegLong(1L),
                   Active
                 ),
-                hashedBlocks(3).proofsHash -> MajorityBlock(
+                hashedBlocks(3).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(3).height, hashedBlocks(3).proofsHash),
                   NonNegLong(1L),
                   Active
                 ),
-                hashedBlocks(4).proofsHash -> MajorityBlock(
+                hashedBlocks(4).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(4).height, hashedBlocks(4).proofsHash),
                   0L,
                   Deprecated
                 ),
-                hashedBlocks(5).proofsHash -> MajorityBlock(
+                hashedBlocks(5).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(5).height, hashedBlocks(5).proofsHash),
                   2L,
                   Active
                 ),
-                parent1.hash -> MajorityBlock(parent1, 1L, Active),
-                parent3.hash -> MajorityBlock(parent3, 0L, Deprecated)
+                parent1.hash -> MajorityBlock[DAGTransaction, DAGBlock](parent1, 1L, Active),
+                parent3.hash -> MajorityBlock[DAGTransaction, DAGBlock](parent3, 0L, Deprecated)
               ),
               snapshotBalances,
               Some(hashedSnapshot),
@@ -548,16 +548,16 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
           ).flatMap(_.toHashedWithSignatureCheck.map(_.toOption.get))
           _ <- lastSnapR.set(hashedLastSnapshot.some)
           // Inserting tips
-          _ <- blocksR(parent1.hash).set(MajorityBlock(parent1, 2L, Deprecated).some)
-          _ <- blocksR(parent2.hash).set(MajorityBlock(parent2, 2L, Deprecated).some)
-          _ <- blocksR(parent3.hash).set(MajorityBlock(parent3, 1L, Active).some)
-          _ <- blocksR(parent4.hash).set(MajorityBlock(parent4, 1L, Active).some)
+          _ <- blocksR(parent1.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent1, 2L, Deprecated).some)
+          _ <- blocksR(parent2.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent2, 2L, Deprecated).some)
+          _ <- blocksR(parent3.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent3, 1L, Active).some)
+          _ <- blocksR(parent4.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent4, 1L, Active).some)
           // Inserting blocks in required state
-          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock(hashedBlocks.head.signed).some)
-          _ <- blocksR(hashedBlocks(1).proofsHash).set(AcceptedBlock(hashedBlocks(1)).some)
-          _ <- blocksR(hashedBlocks(2).proofsHash).set(AcceptedBlock(hashedBlocks(2)).some)
-          _ <- blocksR(hashedBlocks(3).proofsHash).set(AcceptedBlock(hashedBlocks(3)).some)
-          _ <- blocksR(hashedBlocks(4).proofsHash).set(WaitingBlock(hashedBlocks(4).signed).some)
+          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks.head.signed).some)
+          _ <- blocksR(hashedBlocks(1).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(1)).some)
+          _ <- blocksR(hashedBlocks(2).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(2)).some)
+          _ <- blocksR(hashedBlocks(3).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(3)).some)
+          _ <- blocksR(hashedBlocks(4).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(4).signed).some)
 
           processingResult <- snapshotProcessor.process(hashedNextSnapshot)
 
@@ -581,20 +581,20 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
                 Set(hashedBlocks.head.proofsHash)
               ),
               Map(
-                parent3.hash -> MajorityBlock(parent3, 1L, Deprecated),
-                parent4.hash -> MajorityBlock(parent4, 1L, Active),
-                hashedBlocks(1).proofsHash -> MajorityBlock(
+                parent3.hash -> MajorityBlock[DAGTransaction, DAGBlock](parent3, 1L, Deprecated),
+                parent4.hash -> MajorityBlock[DAGTransaction, DAGBlock](parent4, 1L, Active),
+                hashedBlocks(1).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(1).height, hashedBlocks(1).proofsHash),
                   1L,
                   Active
                 ),
-                hashedBlocks(2).proofsHash -> AcceptedBlock(hashedBlocks(2)),
-                hashedBlocks(3).proofsHash -> MajorityBlock(
+                hashedBlocks(2).proofsHash -> AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(2)),
+                hashedBlocks(3).proofsHash -> MajorityBlock[DAGTransaction, DAGBlock](
                   BlockReference(hashedBlocks(3).height, hashedBlocks(3).proofsHash),
                   2L,
                   Active
                 ),
-                hashedBlocks(4).proofsHash -> WaitingBlock(hashedBlocks(4).signed)
+                hashedBlocks(4).proofsHash -> WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(4).signed)
               ),
               Map.empty,
               Some(hashedNextSnapshot),
@@ -727,18 +727,18 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
           ).flatMap(_.toHashedWithSignatureCheck.map(_.toOption.get))
           _ <- lastSnapR.set(hashedLastSnapshot.some)
           // Inserting tips
-          _ <- blocksR(parent1.hash).set(MajorityBlock(parent1, 2L, Deprecated).some)
-          _ <- blocksR(parent2.hash).set(MajorityBlock(parent2, 2L, Deprecated).some)
-          _ <- blocksR(parent3.hash).set(MajorityBlock(parent3, 1L, Active).some)
-          _ <- blocksR(parent4.hash).set(MajorityBlock(parent4, 1L, Active).some)
+          _ <- blocksR(parent1.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent1, 2L, Deprecated).some)
+          _ <- blocksR(parent2.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent2, 2L, Deprecated).some)
+          _ <- blocksR(parent3.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent3, 1L, Active).some)
+          _ <- blocksR(parent4.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent4, 1L, Active).some)
           // Inserting blocks in required state
-          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock(hashedBlocks.head.signed).some)
-          _ <- blocksR(hashedBlocks(1).proofsHash).set(WaitingBlock(hashedBlocks(1).signed).some)
-          _ <- blocksR(hashedBlocks(2).proofsHash).set(AcceptedBlock(hashedBlocks(2)).some)
-          _ <- blocksR(hashedBlocks(4).proofsHash).set(AcceptedBlock(hashedBlocks(4)).some)
-          _ <- blocksR(hashedBlocks(5).proofsHash).set(AcceptedBlock(hashedBlocks(5)).some)
-          _ <- blocksR(hashedBlocks(6).proofsHash).set(AcceptedBlock(hashedBlocks(6)).some)
-          _ <- blocksR(hashedBlocks(8).proofsHash).set(WaitingBlock(hashedBlocks(8).signed).some)
+          _ <- blocksR(hashedBlocks.head.proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks.head.signed).some)
+          _ <- blocksR(hashedBlocks(1).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(1).signed).some)
+          _ <- blocksR(hashedBlocks(2).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(2)).some)
+          _ <- blocksR(hashedBlocks(4).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(4)).some)
+          _ <- blocksR(hashedBlocks(5).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(5)).some)
+          _ <- blocksR(hashedBlocks(6).proofsHash).set(AcceptedBlock[DAGTransaction, DAGBlock](hashedBlocks(6)).some)
+          _ <- blocksR(hashedBlocks(8).proofsHash).set(WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(8).signed).some)
 
           processingResult <- snapshotProcessor.process(hashedNextSnapshot)
 
@@ -781,7 +781,7 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
                   1L,
                   Active
                 ),
-                hashedBlocks(5).proofsHash -> WaitingBlock(hashedBlocks(5).signed),
+                hashedBlocks(5).proofsHash -> WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(5).signed),
                 hashedBlocks(6).proofsHash -> MajorityBlock(
                   BlockReference(hashedBlocks(6).height, hashedBlocks(6).proofsHash),
                   0L,
@@ -792,7 +792,7 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
                   0L,
                   Active
                 ),
-                hashedBlocks(8).proofsHash -> WaitingBlock(hashedBlocks(8).signed)
+                hashedBlocks(8).proofsHash -> WaitingBlock[DAGTransaction, DAGBlock](hashedBlocks(8).signed)
               ),
               snapshotBalances,
               Some(hashedNextSnapshot),
@@ -873,7 +873,7 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
           ).flatMap(_.toHashedWithSignatureCheck.map(_.toOption.get))
           _ <- lastSnapR.set(hashedLastSnapshot.some)
           // Inserting tips
-          _ <- blocksR(parent2.hash).set(MajorityBlock(parent2, 1L, Active).some)
+          _ <- blocksR(parent2.hash).set(MajorityBlock[DAGTransaction, DAGBlock](parent2, 1L, Active).some)
 
           processingResult <- snapshotProcessor
             .process(hashedNextSnapshot)

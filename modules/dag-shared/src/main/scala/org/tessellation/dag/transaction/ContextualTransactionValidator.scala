@@ -20,13 +20,13 @@ import derevo.cats.{eqv, show}
 import derevo.derive
 import eu.timepit.refined.auto._
 
-trait ContextualTransactionValidator[F[_]] {
+trait ContextualTransactionValidator[F[_], A <: Transaction] {
 
   import ContextualTransactionValidator._
 
   def validate(
-    signedTransaction: Signed[Transaction]
-  ): F[ContextualTransactionValidationErrorOr[Signed[Transaction]]]
+    signedTransaction: Signed[A]
+  ): F[ContextualTransactionValidationErrorOr[Signed[A]]]
 
 }
 
@@ -38,15 +38,15 @@ object ContextualTransactionValidator {
 
   }
 
-  def make[F[_]: Async: KryoSerializer](
-    nonContextualValidator: TransactionValidator[F],
+  def make[F[_]: Async: KryoSerializer, A <: Transaction](
+    nonContextualValidator: TransactionValidator[F, A],
     context: TransactionValidationContext[F]
-  ): ContextualTransactionValidator[F] =
-    new ContextualTransactionValidator[F] {
+  ): ContextualTransactionValidator[F, A] =
+    new ContextualTransactionValidator[F, A] {
 
       def validate(
-        signedTransaction: Signed[Transaction]
-      ): F[ContextualTransactionValidationErrorOr[Signed[Transaction]]] =
+        signedTransaction: Signed[A]
+      ): F[ContextualTransactionValidationErrorOr[Signed[A]]] =
         for {
           nonContextuallyV <- validateNonContextually(signedTransaction)
           lastTxRefV <- validateLastTransactionRef(signedTransaction)
@@ -55,15 +55,15 @@ object ContextualTransactionValidator {
             .productR(lastTxRefV)
 
       private def validateNonContextually(
-        signedTx: Signed[Transaction]
-      ): F[ContextualTransactionValidationErrorOr[Signed[Transaction]]] =
+        signedTx: Signed[A]
+      ): F[ContextualTransactionValidationErrorOr[Signed[A]]] =
         nonContextualValidator
           .validate(signedTx)
           .map(_.errorMap(NonContextualValidationError))
 
       private def validateLastTransactionRef(
-        signedTx: Signed[Transaction]
-      ): F[ContextualTransactionValidationErrorOr[Signed[Transaction]]] =
+        signedTx: Signed[A]
+      ): F[ContextualTransactionValidationErrorOr[Signed[A]]] =
         context.getLastTransactionRef(signedTx.source).map { lastTxRef =>
           if (signedTx.parent.ordinal > lastTxRef.ordinal)
             signedTx.validNec[ContextualTransactionValidationError]

@@ -18,6 +18,7 @@ import org.tessellation.ext.kryo._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.height.Height
+import org.tessellation.schema.transaction.DAGTransaction
 import org.tessellation.security.hash.{Hash, ProofsHash}
 import org.tessellation.security.signature.Signed
 import org.tessellation.shared.sharedKryoRegistrar
@@ -42,10 +43,10 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
 
   def mkBlockAcceptanceManager(acceptInitiallyAwaiting: Boolean = true)(implicit kryo: KryoSerializer[IO]) =
     Ref[F].of[Map[Signed[DAGBlock], Boolean]](Map.empty.withDefaultValue(false)).map { state =>
-      val blockLogic = new BlockAcceptanceLogic[IO] {
+      val blockLogic = new BlockAcceptanceLogic[IO, DAGTransaction, DAGBlock] {
         override def acceptBlock(
           block: Signed[DAGBlock],
-          txChains: Map[Address, TransactionChainValidator.TransactionNel],
+          txChains: Map[Address, TransactionChainValidator.TransactionNel[DAGTransaction]],
           context: BlockAcceptanceContext[IO],
           contextUpdate: BlockAcceptanceContextUpdate
         ): EitherT[IO, BlockNotAcceptedReason, (BlockAcceptanceContextUpdate, UsageCount)] =
@@ -87,25 +88,25 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
           )
       }
 
-      val blockValidator = new BlockValidator[IO] {
+      val blockValidator = new BlockValidator[IO, DAGTransaction, DAGBlock] {
 
         override def validate(
           signedBlock: Signed[DAGBlock],
           params: BlockValidator.BlockValidationParams
         ): IO[BlockValidator.BlockValidationErrorOr[
-          (Signed[DAGBlock], Map[Address, TransactionChainValidator.TransactionNel])
+          (Signed[DAGBlock], Map[Address, TransactionChainValidator.TransactionNel[DAGTransaction]])
         ]] = signedBlock.parent.head match {
           case `invalidParent` => IO.pure(NotEnoughParents(0, 0).invalidNec)
-          case _               => IO.pure((signedBlock, Map.empty[Address, TransactionChainValidator.TransactionNel]).validNec)
+          case _ => IO.pure((signedBlock, Map.empty[Address, TransactionChainValidator.TransactionNel[DAGTransaction]]).validNec)
 
         }
       }
-      BlockAcceptanceManager.make[IO](blockLogic, blockValidator)
+      BlockAcceptanceManager.make[IO, DAGTransaction, DAGBlock](blockLogic, blockValidator)
     }
 
   test("accept valid block") { implicit ks =>
     forall(validAcceptedDAGBlocksGen) { blocks =>
-      val expected = BlockAcceptanceResult(
+      val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
         BlockAcceptanceContextUpdate.empty
           .copy(parentUsages = Map((validAcceptedParent, 1L))),
         blocks.sorted.map(b => (b, 0L)),
@@ -121,7 +122,7 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
   test("reject valid block") { implicit ks =>
     forall(validRejectedDAGBlocksGen) {
       case (acceptedBlocks, rejectedBlocks) =>
-        val expected = BlockAcceptanceResult(
+        val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
           BlockAcceptanceContextUpdate.empty
             .copy(parentUsages = if (acceptedBlocks.nonEmpty) Map((validAcceptedParent, 1L)) else Map.empty),
           acceptedBlocks.sorted.map(b => (b, 0L)),
@@ -138,7 +139,7 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
   test("awaiting valid block") { implicit ks =>
     forall(validAwaitingDAGBlocksGen) {
       case (acceptedBlocks, awaitingBlocks) =>
-        val expected = BlockAcceptanceResult(
+        val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
           BlockAcceptanceContextUpdate.empty
             .copy(parentUsages = if (acceptedBlocks.nonEmpty) Map((validAcceptedParent, 1L)) else Map.empty),
           acceptedBlocks.sorted.map(b => (b, 0L)),
@@ -154,7 +155,7 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
 
   test("accept initially awaiting valid block") { implicit ks =>
     forall(validInitiallyAwaitingDAGBlocksGen) { blocks =>
-      val expected = BlockAcceptanceResult(
+      val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
         BlockAcceptanceContextUpdate.empty
           .copy(parentUsages = Map((validInitiallyAwaitingParent, 1L))),
         blocks.sorted.map(b => (b, 0L)),
@@ -170,7 +171,7 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
 
   test("reject initially awaiting valid block") { implicit ks =>
     forall(validInitiallyAwaitingDAGBlocksGen) { blocks =>
-      val expected = BlockAcceptanceResult(
+      val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
         BlockAcceptanceContextUpdate.empty,
         Nil,
         blocks.sorted.reverse.map(b => (b, ParentNotFound(validInitiallyAwaitingParent)))
@@ -184,7 +185,7 @@ object BlockAcceptanceManagerSuite extends MutableIOSuite with Checkers {
 
   test("invalid block") { implicit ks =>
     forall(invalidDAGBlocksGen) { blocks =>
-      val expected = BlockAcceptanceResult(
+      val expected = BlockAcceptanceResult[DAGTransaction, DAGBlock](
         BlockAcceptanceContextUpdate.empty,
         Nil,
         blocks.sorted.reverse.map(b => (b, ValidationFailed(NonEmptyList.of(NotEnoughParents(0, 0)))))

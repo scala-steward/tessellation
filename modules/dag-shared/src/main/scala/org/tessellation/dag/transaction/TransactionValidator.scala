@@ -18,22 +18,22 @@ import derevo.cats.{eqv, show}
 import derevo.derive
 import eu.timepit.refined.auto._
 
-trait TransactionValidator[F[_]] {
+trait TransactionValidator[F[_], A <: Transaction] {
 
-  def validate(signedTransaction: Signed[Transaction]): F[TransactionValidationErrorOr[Signed[Transaction]]]
+  def validate(signedTransaction: Signed[A]): F[TransactionValidationErrorOr[Signed[A]]]
 
 }
 
 object TransactionValidator {
 
-  def make[F[_]: Async: KryoSerializer: SecurityProvider](
+  def make[F[_]: Async: KryoSerializer: SecurityProvider, A <: Transaction](
     signedValidator: SignedValidator[F]
-  ): TransactionValidator[F] =
-    new TransactionValidator[F] {
+  ): TransactionValidator[F, A] =
+    new TransactionValidator[F, A] {
 
       def validate(
-        signedTransaction: Signed[Transaction]
-      ): F[TransactionValidationErrorOr[Signed[Transaction]]] =
+        signedTransaction: Signed[A]
+      ): F[TransactionValidationErrorOr[Signed[A]]] =
         for {
           signaturesV <- signedValidator
             .validateSignatures(signedTransaction)
@@ -46,8 +46,8 @@ object TransactionValidator {
             .productR(differentSrcAndDstV)
 
       private def validateSourceAddressSignature(
-        signedTx: Signed[Transaction]
-      ): F[TransactionValidationErrorOr[Signed[Transaction]]] =
+        signedTx: Signed[A]
+      ): F[TransactionValidationErrorOr[Signed[A]]] =
         signedTx.proofs.existsM { proof =>
           proof.id.hex.toPublicKey.map { signerPk =>
             signerPk.toAddress =!= signedTx.value.source
@@ -55,18 +55,18 @@ object TransactionValidator {
         }.ifM(
           NotSignedBySourceAddressOwner
             .asInstanceOf[TransactionValidationError]
-            .invalidNec[Signed[Transaction]]
+            .invalidNec[Signed[A]]
             .pure[F],
           signedTx.validNec[TransactionValidationError].pure[F]
         )
 
       private def validateDifferentSourceAndDestinationAddress(
-        signedTx: Signed[Transaction]
-      ): TransactionValidationErrorOr[Signed[Transaction]] =
+        signedTx: Signed[A]
+      ): TransactionValidationErrorOr[Signed[A]] =
         if (signedTx.source =!= signedTx.destination)
           signedTx.validNec[TransactionValidationError]
         else
-          SameSourceAndDestinationAddress(signedTx.source).invalidNec[Signed[Transaction]]
+          SameSourceAndDestinationAddress(signedTx.source).invalidNec[Signed[A]]
     }
 
   @derive(eqv, show)

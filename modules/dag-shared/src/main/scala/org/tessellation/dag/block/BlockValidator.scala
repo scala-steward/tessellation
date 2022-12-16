@@ -12,14 +12,14 @@ import cats.syntax.validated._
 import cats.{Functor, Order}
 
 import org.tessellation.dag.block.BlockValidator.{BlockValidationErrorOr, BlockValidationParams}
-import org.tessellation.dag.domain.block.{BlockReference, DAGBlock}
+import org.tessellation.dag.domain.block.{Block, BlockReference}
 import org.tessellation.dag.transaction.TransactionChainValidator.{TransactionChainBroken, TransactionNel}
 import org.tessellation.dag.transaction.TransactionValidator.TransactionValidationError
 import org.tessellation.dag.transaction.{TransactionChainValidator, TransactionValidator}
 import org.tessellation.ext.cats.syntax.validated._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
-import org.tessellation.schema.transaction.TransactionReference
+import org.tessellation.schema.transaction.{Transaction, TransactionReference}
 import org.tessellation.security.signature.SignedValidator.SignedValidationError
 import org.tessellation.security.signature.{Signed, SignedValidator}
 
@@ -28,40 +28,40 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.PosInt
 
-trait BlockValidator[F[_]] {
+trait BlockValidator[F[_], A <: Transaction, B <: Block[A]] {
 
   def validate(
-    signedBlock: Signed[DAGBlock],
+    signedBlock: Signed[B],
     params: BlockValidationParams = BlockValidationParams.default
-  ): F[BlockValidationErrorOr[(Signed[DAGBlock], Map[Address, TransactionNel])]]
+  ): F[BlockValidationErrorOr[(Signed[B], Map[Address, TransactionNel[A]])]]
 
   def validateGetBlock(
-    signedBlock: Signed[DAGBlock],
+    signedBlock: Signed[B],
     params: BlockValidationParams = BlockValidationParams.default
-  )(implicit ev: Functor[F]): F[BlockValidationErrorOr[Signed[DAGBlock]]] =
+  )(implicit ev: Functor[F]): F[BlockValidationErrorOr[Signed[B]]] =
     validate(signedBlock, params).map(_.map(_._1))
 
   def validateGetTxChains(
-    signedBlock: Signed[DAGBlock],
+    signedBlock: Signed[B],
     params: BlockValidationParams = BlockValidationParams.default
-  )(implicit ev: Functor[F]): F[BlockValidationErrorOr[Map[Address, TransactionNel]]] =
+  )(implicit ev: Functor[F]): F[BlockValidationErrorOr[Map[Address, TransactionNel[A]]]] =
     validate(signedBlock, params).map(_.map(_._2))
 
 }
 
 object BlockValidator {
 
-  def make[F[_]: Async: KryoSerializer](
+  def make[F[_]: Async: KryoSerializer, A <: Transaction, B <: Block[A]](
     signedValidator: SignedValidator[F],
-    transactionChainValidator: TransactionChainValidator[F],
-    transactionValidator: TransactionValidator[F]
-  ): BlockValidator[F] =
-    new BlockValidator[F] {
+    transactionChainValidator: TransactionChainValidator[F, A],
+    transactionValidator: TransactionValidator[F, A]
+  ): BlockValidator[F, A, B] =
+    new BlockValidator[F, A, B] {
 
       def validate(
-        signedBlock: Signed[DAGBlock],
+        signedBlock: Signed[B],
         params: BlockValidationParams
-      ): F[BlockValidationErrorOr[(Signed[DAGBlock], Map[Address, TransactionNel])]] =
+      ): F[BlockValidationErrorOr[(Signed[B], Map[Address, TransactionNel[A]])]] =
         for {
           signedV <- validateSigned(signedBlock, params)
           transactionsV <- validateTransactions(signedBlock)
@@ -74,9 +74,9 @@ object BlockValidator {
             .product(transactionChainV)
 
       private def validateSigned(
-        signedBlock: Signed[DAGBlock],
+        signedBlock: Signed[B],
         params: BlockValidationParams
-      ): F[BlockValidationErrorOr[Signed[DAGBlock]]] =
+      ): F[BlockValidationErrorOr[Signed[B]]] =
         signedValidator
           .validateSignatures(signedBlock)
           .map { signaturesV =>
@@ -87,8 +87,8 @@ object BlockValidator {
           .map(_.errorMap[BlockValidationError](InvalidSigned))
 
       private def validateTransactions(
-        signedBlock: Signed[DAGBlock]
-      ): F[BlockValidationErrorOr[Signed[DAGBlock]]] =
+        signedBlock: Signed[B]
+      ): F[BlockValidationErrorOr[Signed[B]]] =
         signedBlock.value.transactions.toNonEmptyList.traverse { signedTransaction =>
           for {
             txRef <- TransactionReference.of(signedTransaction)
@@ -101,36 +101,36 @@ object BlockValidator {
         }
 
       private def validateTransactionChain(
-        signedBlock: Signed[DAGBlock]
-      ): F[BlockValidationErrorOr[Map[Address, TransactionNel]]] =
+        signedBlock: Signed[B]
+      ): F[BlockValidationErrorOr[Map[Address, TransactionNel[A]]]] =
         transactionChainValidator
           .validate(signedBlock.transactions)
           .map(_.errorMap[BlockValidationError](InvalidTransactionChain))
 
       private def validateProperties(
-        signedBlock: Signed[DAGBlock],
+        signedBlock: Signed[B],
         params: BlockValidationParams
-      ): BlockValidationErrorOr[Signed[DAGBlock]] =
+      ): BlockValidationErrorOr[Signed[B]] =
         validateParentCount(signedBlock, params)
           .productR(validateUniqueParents(signedBlock))
 
       private def validateParentCount(
-        signedBlock: Signed[DAGBlock],
+        signedBlock: Signed[B],
         params: BlockValidationParams
-      ): BlockValidationErrorOr[Signed[DAGBlock]] =
+      ): BlockValidationErrorOr[Signed[B]] =
         if (signedBlock.parent.size >= params.minParentCount)
           signedBlock.validNec
         else
           NotEnoughParents(signedBlock.parent.size, params.minParentCount).invalidNec
 
       private def validateUniqueParents(
-        signedBlock: Signed[DAGBlock]
-      ): BlockValidationErrorOr[Signed[DAGBlock]] =
-        duplicatedValues(signedBlock.parent).toNel
+        signedBlock: Signed[B]
+      ): BlockValidationErrorOr[Signed[B]] =
+        duplicatedValues[BlockReference](signedBlock.parent).toNel
           .map(NonUniqueParents)
           .toInvalidNec(signedBlock)
 
-      private def duplicatedValues[A: Order](values: NonEmptyList[A]): List[A] =
+      private def duplicatedValues[T: Order](values: NonEmptyList[T]): List[T] =
         values.groupBy(identity).toList.mapFilter {
           case (value, occurrences) =>
             if (occurrences.tail.nonEmpty)
