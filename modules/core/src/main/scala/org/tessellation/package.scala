@@ -6,18 +6,18 @@ import cats.effect.Async
 
 import scala.util.control.NoStackTrace
 
-import org.tessellation.domain.aci.StateChannelOutput
 import org.tessellation.ext.kryo._
 import org.tessellation.schema.peer.PeerId
-import org.tessellation.security.SecurityProvider
+import org.tessellation.schema.security.SecurityProvider
+import org.tessellation.schema.statechannels.StateChannelOutput
 
 import eu.timepit.refined.auto._
-import eu.timepit.refined.numeric.Interval
+import eu.timepit.refined.numeric.Greater
 import io.estatico.newtype.ops._
 
 package object tessellation {
 
-  type CoreKryoRegistrationIdRange = Interval.Closed[700, 799]
+  type CoreKryoRegistrationIdRange = Greater[100]
   type CoreKryoRegistrationId = KryoRegistrationId[CoreKryoRegistrationIdRange]
 
   val coreKryoRegistrar: Map[Class[_], CoreKryoRegistrationId] = Map(

@@ -9,6 +9,7 @@ import _root_.cats.syntax.either._
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.auto._
 import eu.timepit.refined.boolean.Or
+import eu.timepit.refined.numeric.Greater
 
 object kryo {
 
@@ -37,6 +38,14 @@ object kryo {
   }
 
   type KryoRegistrationId[C] = Int Refined C
+
+  implicit class MapRegistrationGreaterId[A](mapa: Map[Class[_], KryoRegistrationId[Greater[A]]]) {
+
+    def union[B](mapb: Map[Class[_], KryoRegistrationId[Greater[A]]]) =
+      mapa.view.mapValues[KryoRegistrationId[Greater[A]]](identity).toMap ++
+        mapb.view.mapValues[KryoRegistrationId[Greater[A]]](identity).toMap
+
+  }
 
   implicit class MapRegistrationId[C1](mapa: Map[Class[_], KryoRegistrationId[C1]]) {
 

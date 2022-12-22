@@ -7,8 +7,9 @@ import cats.syntax.functor._
 import org.tessellation.dag.domain.block.DAGBlock
 import org.tessellation.domain.cell.{L0Cell, L0CellInput}
 import org.tessellation.domain.dag.DAGService
-import org.tessellation.ext.http4s.{AddressVar, SnapshotOrdinalVar}
-import org.tessellation.security.signature.Signed
+import org.tessellation.ext.http4s.SnapshotOrdinalVar
+import org.tessellation.schema.ext.http4s.AddressVar
+import org.tessellation.schema.security.signature.Signed
 
 import io.circe.shapes._
 import org.http4s.HttpRoutes

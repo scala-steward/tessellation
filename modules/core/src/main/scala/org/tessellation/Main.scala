@@ -17,15 +17,16 @@ import org.tessellation.infrastructure.trust.handler.trustHandler
 import org.tessellation.modules._
 import org.tessellation.schema.cluster.ClusterId
 import org.tessellation.schema.node.NodeState
+import org.tessellation.schema.security.signature.Signed
 import org.tessellation.sdk.app.{SDK, TessellationIOApp}
 import org.tessellation.sdk.infrastructure.gossip.{GossipDaemon, RumorHandlers}
 import org.tessellation.sdk.resources.MkHttpServer
 import org.tessellation.sdk.resources.MkHttpServer.ServerName
-import org.tessellation.security.signature.Signed
 
 import com.monovore.decline.Opts
 import eu.timepit.refined.auto._
 import eu.timepit.refined.boolean.Or
+import eu.timepit.refined.numeric.Greater
 
 object Main
     extends TessellationIOApp[Run](
@@ -37,7 +38,7 @@ object Main
 
   val opts: Opts[Run] = cli.method.opts
 
-  type KryoRegistrationIdRange = CoreKryoRegistrationIdRange Or DagSharedKryoRegistrationIdRange
+  type KryoRegistrationIdRange = Greater[100]
 
   val kryoRegistrar: Map[Class[_], KryoRegistrationId[KryoRegistrationIdRange]] =
     coreKryoRegistrar.union(dagSharedKryoRegistrar)
