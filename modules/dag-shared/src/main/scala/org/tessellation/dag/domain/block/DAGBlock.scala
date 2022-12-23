@@ -4,6 +4,7 @@ import cats.data.{NonEmptyList, NonEmptySet}
 
 import org.tessellation.ext.cats.data.OrderBasedOrdering
 import org.tessellation.ext.codecs.NonEmptySetCodec
+import org.tessellation.schema.OrphanInstances._
 import org.tessellation.schema._
 import org.tessellation.schema.security.signature.Signed
 import org.tessellation.schema.transaction.Transaction

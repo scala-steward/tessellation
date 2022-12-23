@@ -18,6 +18,8 @@ import io.estatico.newtype.macros.newtype
 import io.getquill.MappedEncoding
 import monocle.Iso
 
+import OrphanInstances._
+
 object balance {
 
   @derive(eqv, decoder, encoder, order, show)

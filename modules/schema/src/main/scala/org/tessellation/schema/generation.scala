@@ -14,6 +14,8 @@ import eu.timepit.refined.scalacheck.numeric._
 import eu.timepit.refined.types.numeric.PosLong
 import io.estatico.newtype.macros.newtype
 
+import OrphanInstances._
+
 object generation {
   @derive(arbitrary, order, show, encoder, decoder, keyEncoder, keyDecoder)
   @newtype

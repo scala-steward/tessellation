@@ -7,6 +7,8 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.NonNegLong
 
+import OrphanInstances._
+
 @derive(order, show, encoder, decoder)
 case class ActiveTip(
   block: BlockReference,

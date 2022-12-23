@@ -25,7 +25,6 @@ import org.tessellation.sdk.resources.MkHttpServer.ServerName
 
 import com.monovore.decline.Opts
 import eu.timepit.refined.auto._
-import eu.timepit.refined.boolean.Or
 import eu.timepit.refined.numeric.Greater
 
 object Main

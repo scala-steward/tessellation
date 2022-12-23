@@ -5,7 +5,7 @@ import cats.kernel._
 import cats.syntax.semigroup._
 
 import org.tessellation.ext.derevo.ordering
-import org.tessellation.schema._
+import org.tessellation.schema.OrphanInstances._
 
 import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}

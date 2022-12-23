@@ -5,7 +5,7 @@ import cats.effect._
 import cats.effect.std.{Queue, Random, Supervisor}
 import cats.syntax.all._
 
-import org.tessellation.schema._
+import org.tessellation.schema.OrphanInstances._
 import org.tessellation.schema.peer.Peer
 import org.tessellation.sdk.config.types.GossipRoundConfig
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage

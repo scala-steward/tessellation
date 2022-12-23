@@ -9,7 +9,6 @@ import org.tessellation.dag.dagSharedKryoRegistrar
 import org.tessellation.dag.snapshot.GlobalSnapshot
 import org.tessellation.ext.kryo._
 import org.tessellation.kryo.KryoSerializer
-import org.tessellation.schema._
 import org.tessellation.schema.ext.crypto._
 import org.tessellation.schema.security.hash.Hash
 import org.tessellation.schema.security.signature.Signed

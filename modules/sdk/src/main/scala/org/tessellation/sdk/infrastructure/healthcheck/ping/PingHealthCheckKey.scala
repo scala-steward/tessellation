@@ -1,6 +1,6 @@
 package org.tessellation.sdk.infrastructure.healthcheck.ping
 
-import org.tessellation.schema._
+import org.tessellation.schema.OrphanInstances._
 import org.tessellation.schema.cluster.SessionToken
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.domain.healthcheck.consensus.types.HealthCheckKey

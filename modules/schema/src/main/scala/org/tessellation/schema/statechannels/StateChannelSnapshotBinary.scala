@@ -3,8 +3,8 @@ package org.tessellation.schema.statechannels
 import cats.Show
 import cats.syntax.show._
 
-import org.tessellation.schema.arrayOrder
 import org.tessellation.schema.security.hash.Hash
+import org.tessellation.schema.statechannels.ArrayOrder._
 
 import derevo.cats.{eqv, order}
 import derevo.circe.magnolia.{decoder, encoder}

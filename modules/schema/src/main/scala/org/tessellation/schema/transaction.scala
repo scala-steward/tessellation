@@ -28,6 +28,8 @@ import io.estatico.newtype.ops._
 import monocle.Lens
 import monocle.macros.GenLens
 
+import OrphanInstances._
+
 object transaction {
 
   @derive(decoder, encoder, order, show)

@@ -32,6 +32,8 @@ import io.getquill.MappedEncoding
 import monocle.macros.GenLens
 import monocle.{Iso, Lens}
 
+import OrphanInstances._
+
 object peer {
 
   @derive(eqv, show, decoder, encoder)

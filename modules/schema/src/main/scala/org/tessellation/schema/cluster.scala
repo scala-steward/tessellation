@@ -18,6 +18,8 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.string.Uuid
 import io.estatico.newtype.macros.newtype
 
+import OrphanInstances._
+
 object cluster {
 
   @derive(encoder, decoder, eqv, show, uuid)

@@ -18,6 +18,7 @@ import org.tessellation.schema.statechannels.StateChannelSnapshotBinary
 import org.tessellation.infrastructure.genesis.types.GenesisCSVAccount
 import org.tessellation.keytool.{KeyPairGenerator, KeyStoreUtils}
 import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.OrphanInstances._
 import org.tessellation.schema._
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.transaction._

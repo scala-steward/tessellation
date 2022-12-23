@@ -12,6 +12,8 @@ import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
 import io.circe.{Decoder, Encoder}
 
+import OrphanInstances._
+
 @derive(order, show)
 case class SnapshotOrdinal(value: NonNegLong)
 

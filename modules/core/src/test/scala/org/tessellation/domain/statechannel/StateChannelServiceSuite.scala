@@ -13,6 +13,7 @@ import org.tessellation.domain.statechannel.StateChannelValidator.StateChannelVa
 import org.tessellation.ext.kryo._
 import org.tessellation.keytool.KeyPairGenerator
 import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.schemaKryoRegistrar
 import org.tessellation.schema.security.SecurityProvider
 import org.tessellation.schema.security.hash.Hash
 import org.tessellation.schema.security.key.ops.PublicKeyOps
@@ -20,7 +21,6 @@ import org.tessellation.schema.security.signature.Signed
 import org.tessellation.schema.security.signature.Signed.forAsyncKryo
 import org.tessellation.schema.statechannels.{StateChannelOutput, StateChannelSnapshotBinary}
 import org.tessellation.shared.sharedKryoRegistrar
-import org.tessellation.schema.schemaKryoRegistrar
 
 import eu.timepit.refined.auto._
 import weaver.MutableIOSuite

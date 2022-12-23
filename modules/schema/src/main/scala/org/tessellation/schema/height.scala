@@ -19,6 +19,8 @@ import eu.timepit.refined.scalacheck.all._
 import eu.timepit.refined.types.numeric.NonNegLong
 import io.estatico.newtype.macros.newtype
 
+import OrphanInstances._
+
 object height {
 
   @derive(arbitrary, encoder, decoder, order, ordering, show, eqv)

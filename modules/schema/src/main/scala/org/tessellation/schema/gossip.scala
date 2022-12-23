@@ -26,6 +26,8 @@ import io.circe.Json
 import io.estatico.newtype.macros.newtype
 import io.estatico.newtype.ops._
 
+import OrphanInstances._
+
 object gossip {
 
   @derive(arbitrary, order, show, encoder, decoder)

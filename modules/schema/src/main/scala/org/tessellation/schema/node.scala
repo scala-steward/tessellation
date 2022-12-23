@@ -14,6 +14,8 @@ import derevo.derive
 import enumeratum._
 import io.circe._
 
+import OrphanInstances._
+
 object node {
 
   @derive(eqv, show)
