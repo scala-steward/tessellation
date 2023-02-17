@@ -14,6 +14,8 @@ import org.tessellation.sdk.domain.cluster.storage.L0ClusterStorage
 
 object L0ClusterStorage {
 
+  type GlobalL0ClusterStorage[F[_]] = L0ClusterStorage[F]
+
   implicit val order: Order[L0Peer] = Order[PeerId].contramap(_.id)
   implicit val ordering: Ordering[L0Peer] = order.toOrdering
 

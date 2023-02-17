@@ -341,6 +341,19 @@ lazy val dagL1 = (project in file("modules/dag-l1"))
       Libraries.sqlite
     )
   )
+
+lazy val currencyL1 = (project in file("modules/currency-l1"))
+  .dependsOn(dagL1, sdk)
+  .settings(
+    name := "tessellation-currency-l1",
+    Defaults.itSettings,
+    scalafixCommonSettings,
+    commonSettings,
+    libraryDependencies ++= Seq(
+      CompilerPlugin.semanticDB
+    )
+  )
+
 lazy val tools = (project in file("modules/tools"))
   .enablePlugins(AshScriptPlugin)
   .enablePlugins(JavaAppPackaging)

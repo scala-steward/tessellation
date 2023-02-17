@@ -12,7 +12,7 @@ import org.tessellation.dag.snapshot.{GlobalSnapshot, SnapshotOrdinal}
 import org.tessellation.ext.cats.syntax.next._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.sdk.domain.cluster.storage.L0ClusterStorage
-import org.tessellation.sdk.domain.snapshot.storage.LastGlobalSnapshotStorage
+import org.tessellation.sdk.domain.snapshot.storage.LastSnapshotStorage
 import org.tessellation.sdk.http.p2p.clients.L0GlobalSnapshotClient
 import org.tessellation.security.{Hashed, SecurityProvider}
 
@@ -29,7 +29,7 @@ object L0Service {
   def make[F[_]: Async: KryoSerializer: SecurityProvider](
     l0GlobalSnapshotClient: L0GlobalSnapshotClient[F],
     l0ClusterStorage: L0ClusterStorage[F],
-    lastSnapshotStorage: LastGlobalSnapshotStorage[F],
+    lastGlobalSnapshotStorage: LastSnapshotStorage[F, GlobalSnapshot],
     singlePullLimit: Option[PosLong]
   ): L0Service[F] =
     new L0Service[F] {
@@ -51,7 +51,7 @@ object L0Service {
 
       def pullGlobalSnapshots: F[List[Hashed[GlobalSnapshot]]] = {
         for {
-          lastStoredOrdinal <- lastSnapshotStorage.getOrdinal
+          lastStoredOrdinal <- lastGlobalSnapshotStorage.getOrdinal
           l0Peer <- l0ClusterStorage.getRandomPeer
 
           pulled <- l0GlobalSnapshotClient.getLatestOrdinal

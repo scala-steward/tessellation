@@ -13,21 +13,21 @@ import org.tessellation.security.signature.Signed
 import derevo.cats.{eqv, show}
 import derevo.derive
 
-trait TransactionChainValidator[F[_]] {
+trait TransactionChainValidator[F[_], A <: Transaction] {
 
   def validate(
-    transactions: NonEmptySet[Signed[Transaction]]
-  ): F[TransactionChainValidationErrorOr[Map[Address, TransactionNel]]]
+    transactions: NonEmptySet[Signed[A]]
+  ): F[TransactionChainValidationErrorOr[Map[Address, TransactionNel[A]]]]
 }
 
 object TransactionChainValidator {
 
-  def make[F[_]: Async: KryoSerializer]: TransactionChainValidator[F] =
-    new TransactionChainValidator[F] {
+  def make[F[_]: Async: KryoSerializer, A <: Transaction]: TransactionChainValidator[F, A] =
+    new TransactionChainValidator[F, A] {
 
       def validate(
-        transactions: NonEmptySet[Signed[Transaction]]
-      ): F[TransactionChainValidationErrorOr[Map[Address, TransactionNel]]] =
+        transactions: NonEmptySet[Signed[A]]
+      ): F[TransactionChainValidationErrorOr[Map[Address, TransactionNel[A]]]] =
         transactions.toNonEmptyList
           .groupBy(_.value.source)
           .toList
@@ -43,8 +43,8 @@ object TransactionChainValidator {
 
       private def validateChainForSingleAddress(
         address: Address,
-        txs: TransactionNel
-      ): EitherT[F, TransactionChainBroken, TransactionNel] = {
+        txs: TransactionNel[A]
+      ): EitherT[F, TransactionChainBroken, TransactionNel[A]] = {
         val sortedTxs = txs.sortBy(_.ordinal)
         val initChain = NonEmptyList.of(sortedTxs.head).asRight[TransactionChainBroken].toEitherT[F]
         sortedTxs.tail
@@ -66,6 +66,6 @@ object TransactionChainValidator {
   @derive(eqv, show)
   case class TransactionChainBroken(address: Address, referenceNotFound: TransactionReference)
 
-  type TransactionNel = NonEmptyList[Signed[Transaction]]
+  type TransactionNel[A <: Transaction] = NonEmptyList[Signed[A]]
   type TransactionChainValidationErrorOr[A] = ValidatedNec[TransactionChainBroken, A]
 }

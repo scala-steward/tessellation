@@ -6,6 +6,7 @@ import cats.effect.Async
 import cats.syntax.alternative._
 import cats.syntax.applicative._
 import cats.syntax.applicativeError._
+import cats.syntax.contravariantSemigroupal._
 import cats.syntax.either._
 import cats.syntax.flatMap._
 import cats.syntax.foldable._
@@ -33,15 +34,18 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import io.chrisdavenport.mapref.MapRef
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-class TransactionStorage[F[_]: Async: KryoSerializer](
+class TransactionStorage[F[_]: Async: KryoSerializer, A <: Transaction: Ordering: Order](
   lastAccepted: MapRef[F, Address, Option[LastTransactionReferenceState]],
-  waitingTransactions: MapRef[F, Address, Option[NonEmptySet[Hashed[Transaction]]]]
+  waitingTransactions: MapRef[F, Address, Option[NonEmptySet[Hashed[A]]]]
 ) {
 
   private val logger = Slf4jLogger.getLogger[F]
   private val transactionLogger = Slf4jLogger.getLoggerFromName[F](transactionLoggerName)
 
-  def isParentAccepted(transaction: Transaction): F[Boolean] =
+  def getState(): F[(Map[Address, LastTransactionReferenceState], Map[Address, NonEmptySet[Hashed[A]]])] =
+    (lastAccepted.toMap, waitingTransactions.toMap).mapN((_, _))
+
+  def isParentAccepted(transaction: A): F[Boolean] =
     (transaction.parent != TransactionReference.empty)
       .guard[Option]
       .fold(true.pure[F]) { _ =>
@@ -57,7 +61,7 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
         case (address, reference) => lastAccepted(address).set(Majority(reference).some)
       }.void
 
-  def accept(hashedTx: Hashed[Transaction]): F[Unit] = {
+  def accept(hashedTx: Hashed[A]): F[Unit] = {
     val parent = hashedTx.signed.value.parent
     val source = hashedTx.signed.value.source
     val reference = TransactionReference(hashedTx.signed.value.ordinal, hashedTx.hash)
@@ -87,9 +91,9 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
           .flatMap(_.liftTo[F])
     }.void
 
-  def put(transaction: Hashed[Transaction]): F[Unit] = put(Set(transaction))
+  def put(transaction: Hashed[A]): F[Unit] = put(Set(transaction))
 
-  def put(transactions: Set[Hashed[Transaction]]): F[Unit] =
+  def put(transactions: Set[Hashed[A]]): F[Unit] =
     transactions
       .groupBy(_.signed.value.source)
       .toList
@@ -120,12 +124,12 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
 
             pullForAddress(lastTxState, consecutiveTxs)
           case None =>
-            List.empty[Hashed[Transaction]]
+            List.empty[Hashed[A]]
         }
       }.map(_.flatten)
     } yield txs.size
 
-  def pull(count: NonNegLong): F[Option[NonEmptyList[Hashed[Transaction]]]] =
+  def pull(count: NonNegLong): F[Option[NonEmptyList[Hashed[A]]]] =
     for {
       lastAccepted <- lastAccepted.toMap
       addresses <- waitingTransactions.keys.map(_.sorted)
@@ -149,14 +153,14 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
               .ifM(
                 NonEmptyList.fromList(pulled).pure[F],
                 logger.debug("Concurrent update occurred while trying to pull transactions") >>
-                  none[NonEmptyList[Hashed[Transaction]]].pure[F]
+                  none[NonEmptyList[Hashed[A]]].pure[F]
               )
           }.map(_.flatten)
         } yield pulled
 
         pulledM.handleErrorWith {
           logger.warn(_)(s"Error while pulling transactions for address=${address.show} from waiting pool.") >>
-            none[NonEmptyList[Hashed[Transaction]]].pure[F]
+            none[NonEmptyList[Hashed[A]]].pure[F]
         }
       }.map(_.flatten)
 
@@ -171,8 +175,8 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
 
   private def pullForAddress(
     lastTxState: LastTransactionReferenceState,
-    consecutiveTxs: List[Hashed[Transaction]]
-  ): List[Hashed[Transaction]] =
+    consecutiveTxs: List[Hashed[A]]
+  ): List[Hashed[A]] =
     (lastTxState, consecutiveTxs.headOption) match {
       case (_: Majority, Some(tx)) if tx.fee == TransactionFee.zero =>
         List(tx)
@@ -181,14 +185,14 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
     }
 
   private def takeFirstNHighestFeeTxs(
-    txs: List[NonEmptyList[Hashed[Transaction]]],
+    txs: List[NonEmptyList[Hashed[A]]],
     count: NonNegLong
-  ): List[Hashed[Transaction]] = {
+  ): List[Hashed[A]] = {
     @tailrec
     def go(
-      txs: SortedSet[NonEmptyList[Hashed[Transaction]]],
-      acc: List[Hashed[Transaction]]
-    ): List[Hashed[Transaction]] =
+      txs: SortedSet[NonEmptyList[Hashed[A]]],
+      acc: List[Hashed[A]]
+    ): List[Hashed[A]] =
       if (acc.size == count.value)
         acc.reverse
       else {
@@ -205,14 +209,14 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
         }
       }
 
-    val order: Order[NonEmptyList[Hashed[Transaction]]] =
-      Order.whenEqual(Order.by(-_.head.fee.value.value), Order[NonEmptyList[Hashed[Transaction]]])
+    val order: Order[NonEmptyList[Hashed[A]]] =
+      Order.whenEqual(Order.by(-_.head.fee.value.value), Order[NonEmptyList[Hashed[A]]])
     val sortedTxs = SortedSet.from(txs)(order.toOrdering)
 
     go(sortedTxs, List.empty)
   }
 
-  def find(hash: Hash): F[Option[Hashed[Transaction]]] =
+  def find(hash: Hash): F[Option[Hashed[A]]] =
     waitingTransactions.toMap.map(_.view.values.toList.flatMap(_.toList)).map {
       _.find(_.hash === hash)
     }
@@ -221,12 +225,21 @@ class TransactionStorage[F[_]: Async: KryoSerializer](
 
 object TransactionStorage {
 
-  def make[F[_]: Async: KryoSerializer]: F[TransactionStorage[F]] =
+  def make[F[_]: Async: KryoSerializer, A <: Transaction: Order: Ordering]: F[TransactionStorage[F, A]] =
     for {
       lastAccepted <- MapRef.ofConcurrentHashMap[F, Address, LastTransactionReferenceState]()
-      waitingTransactions <- MapRef.ofConcurrentHashMap[F, Address, NonEmptySet[Hashed[Transaction]]]()
-      transactionStorage = new TransactionStorage[F](lastAccepted, waitingTransactions)
+      waitingTransactions <- MapRef.ofConcurrentHashMap[F, Address, NonEmptySet[Hashed[A]]]()
+      transactionStorage = new TransactionStorage[F, A](lastAccepted, waitingTransactions)
     } yield transactionStorage
+
+  def make[F[_]: Async: KryoSerializer, A <: Transaction: Order: Ordering](
+    lastAccepted: Map[Address, LastTransactionReferenceState],
+    waitingTransactions: Map[Address, NonEmptySet[Hashed[A]]]
+  ): F[TransactionStorage[F, A]] =
+    (
+      MapRef.ofSingleImmutableMap(lastAccepted),
+      MapRef.ofSingleImmutableMap(waitingTransactions)
+    ).mapN(new TransactionStorage(_, _))
 
   sealed trait TransactionAcceptanceError extends NoStackTrace
   case class ParentNotAccepted(

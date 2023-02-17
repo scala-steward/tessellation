@@ -13,12 +13,13 @@ import cats.syntax.traverse._
 
 import scala.util.control.NoStackTrace
 
-import org.tessellation.dag.domain.block.{BlockReference, DAGBlock, Tips}
+import org.tessellation.dag.domain.block.{Block, BlockReference, Tips}
 import org.tessellation.dag.l1.domain.block.BlockStorage._
 import org.tessellation.dag.snapshot.ActiveTip
 import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.ext.collection.MapRefUtils.MapRefOps
 import org.tessellation.schema.height.Height
+import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.Hashed
 import org.tessellation.security.hash.ProofsHash
 import org.tessellation.security.signature.Signed
@@ -28,28 +29,31 @@ import eu.timepit.refined.types.numeric.{NonNegLong, PosInt}
 import io.chrisdavenport.mapref.MapRef
 import monocle.macros.syntax.lens._
 
-class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[StoredBlock]]) {
+class BlockStorage[F[_]: Sync: Random, A <: Transaction, B <: Block[A]](blocks: MapRef[F, ProofsHash, Option[StoredBlock[A, B]]]) {
 
-  implicit val showStoredBlock: Show[StoredBlock] = {
-    case _: WaitingBlock  => "Waiting"
-    case _: AcceptedBlock => "Accepted"
-    case _: MajorityBlock => "Majority"
+  implicit val showStoredBlock: Show[StoredBlock[A, B]] = {
+    case _: WaitingBlock[_, _]  => "Waiting"
+    case _: AcceptedBlock[_, _] => "Accepted"
+    case _: MajorityBlock[_, _] => "Majority"
   }
 
-  def areParentsAccepted(block: DAGBlock): F[Map[BlockReference, Boolean]] =
+  def getState(): F[Map[ProofsHash, StoredBlock[A, B]]] =
+    blocks.toMap
+
+  def areParentsAccepted(block: B): F[Map[BlockReference, Boolean]] =
     block.parent.traverse { ref =>
       isBlockAccepted(ref).map(ref -> _)
     }.map(_.toList.toMap)
 
-  private[block] def accept(hashedBlock: Hashed[DAGBlock]): F[Unit] =
+  private[block] def accept(hashedBlock: Hashed[B]): F[Unit] =
     blocks(hashedBlock.proofsHash).modify {
-      case Some(_: WaitingBlock) => (AcceptedBlock(hashedBlock).some, hashedBlock.asRight)
-      case other                 => (other, BlockAcceptanceError(hashedBlock.proofsHash, other).asLeft)
+      case Some(_: WaitingBlock[_, _]) => (AcceptedBlock[A, B](hashedBlock).some, hashedBlock.asRight)
+      case other                       => (other, BlockAcceptanceError(hashedBlock.proofsHash, other).asLeft)
     }.flatMap(_.liftTo[F])
       .flatMap(_ => addParentUsages(hashedBlock))
 
   def adjustToMajority(
-    toAdd: Set[(Hashed[DAGBlock], NonNegLong)] = Set.empty,
+    toAdd: Set[(Hashed[B], NonNegLong)] = Set.empty,
     toMarkMajority: Set[(ProofsHash, NonNegLong)] = Set.empty,
     acceptedToRemove: Set[ProofsHash] = Set.empty,
     obsoleteToRemove: Set[ProofsHash] = Set.empty,
@@ -64,7 +68,7 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
         case (block, initialUsages) =>
           val reference = BlockReference(block.height, block.proofsHash)
           blocks(block.proofsHash).modify {
-            case Some(WaitingBlock(_)) | None => (MajorityBlock(reference, initialUsages, Active).some, block.asRight)
+            case Some(WaitingBlock(_)) | None => (MajorityBlock[A, B](reference, initialUsages, Active).some, block.asRight)
             case other                        => (other, UnexpectedBlockStateWhenAddingMajorityBlock(block.proofsHash, other).asLeft)
           }.flatMap(_.liftTo[F])
             .flatMap(addParentUsagesAfterRedownload)
@@ -76,7 +80,7 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
           blocks(hash).modify {
             case Some(AcceptedBlock(block)) =>
               val reference = BlockReference(block.height, block.proofsHash)
-              (MajorityBlock(reference, initialUsages, Active).some, ().asRight)
+              (MajorityBlock[A, B](reference, initialUsages, Active).some, ().asRight)
             case other =>
               (other, UnexpectedBlockStateWhenMarkingAsMajority(hash, other).asLeft)
           }.flatMap(_.liftTo[F])
@@ -102,9 +106,9 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
     def resetBlocks: F[Unit] =
       toReset.toList.traverse { hash =>
         blocks(hash).modify {
-          case Some(AcceptedBlock(block))  => (WaitingBlock(block.signed).some, ().asRight)
-          case Some(waiting: WaitingBlock) => (waiting.some, ().asRight)
-          case other                       => (None, UnexpectedBlockStateWhenResetting(hash, other).asLeft)
+          case Some(AcceptedBlock(block))        => (WaitingBlock[A, B](block.signed).some, ().asRight)
+          case Some(waiting: WaitingBlock[_, _]) => (waiting.some, ().asRight)
+          case other                             => (None, UnexpectedBlockStateWhenResetting(hash, other).asLeft)
         }.flatMap(_.liftTo[F])
       }.void
 
@@ -128,7 +132,7 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
       activeTipsToAdd.toList.traverse { activeTip =>
         blocks(activeTip.block.hash).modify {
           case Some(WaitingBlock(_)) | None =>
-            (MajorityBlock(activeTip.block, activeTip.usageCount, Active).some, ().asRight)
+            (MajorityBlock[A, B](activeTip.block, activeTip.usageCount, Active).some, ().asRight)
           case other => (other, ActiveTipAddingError(activeTip.block.hash, other).asLeft)
         }.flatMap(_.liftTo[F])
       }.void
@@ -136,7 +140,7 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
     def addDeprecatedTips: F[Unit] =
       deprecatedTipsToAdd.toList.traverse { blockReference =>
         blocks(blockReference.hash).modify {
-          case Some(WaitingBlock(_)) | None => (MajorityBlock(blockReference, 0L, Deprecated).some, ().asRight)
+          case Some(WaitingBlock(_)) | None => (MajorityBlock[A, B](blockReference, 0L, Deprecated).some, ().asRight)
           case other                        => (other, DeprecatedTipAddingError(blockReference.hash, other).asLeft)
         }.flatMap(_.liftTo[F])
       }.void
@@ -152,19 +156,19 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
       addDeprecatedTips
   }
 
-  def store(hashedBlock: Hashed[DAGBlock]): F[Unit] =
+  def store(hashedBlock: Hashed[B]): F[Unit] =
     blocks(hashedBlock.proofsHash).modify {
-      case None  => (WaitingBlock(hashedBlock.signed).some, ().asRight)
+      case None  => (WaitingBlock[A, B](hashedBlock.signed).some, ().asRight)
       case other => (other, BlockAlreadyStoredError(hashedBlock.proofsHash, other).asLeft)
     }.flatMap(_.liftTo[F])
 
-  def getWaiting: F[Map[ProofsHash, Signed[DAGBlock]]] =
+  def getWaiting: F[Map[ProofsHash, Signed[B]]] =
     blocks.toMap.map(_.collect { case (hash, WaitingBlock(block)) => hash -> block })
 
   def getUsages(hash: ProofsHash): F[Option[NonNegLong]] =
     blocks(hash).get.map {
-      case Some(block: MajorityBlock) => block.usages.some
-      case _                          => none[NonNegLong]
+      case Some(block: MajorityBlock[A, B]) => block.usages.some
+      case _                                => none[NonNegLong]
     }
 
   def getBlocksForMajorityReconciliation(lastHeight: Height, currentHeight: Height): F[MajorityReconciliationData] =
@@ -198,28 +202,28 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
       }
 
   private def isBlockAccepted(blockReference: BlockReference): F[Boolean] =
-    blocks(blockReference.hash).get.map(_.exists(_.isInstanceOf[MajorityBlock]))
+    blocks(blockReference.hash).get.map(_.exists(_.isInstanceOf[MajorityBlock[A, B]]))
 
-  private def addParentUsages(hashedBlock: Hashed[DAGBlock]): F[Unit] =
+  private def addParentUsages(hashedBlock: Hashed[B]): F[Unit] =
     hashedBlock.parent.toList.traverse { blockReference =>
       blocks(blockReference.hash).modify {
-        case Some(majority: MajorityBlock) => (majority.addUsage.some, ().asRight)
-        case other                         => (other, TipUsageUpdateError(hashedBlock.proofsHash, blockReference.hash, other).asLeft)
+        case Some(majority: MajorityBlock[A, B]) => (majority.addUsage.some, ().asRight)
+        case other                               => (other, TipUsageUpdateError(hashedBlock.proofsHash, blockReference.hash, other).asLeft)
       }.flatMap(_.liftTo[F])
     }.void
 
-  private def addParentUsagesAfterRedownload(hashedBlock: Hashed[DAGBlock]): F[Unit] =
+  private def addParentUsagesAfterRedownload(hashedBlock: Hashed[B]): F[Unit] =
     hashedBlock.parent.toList.traverse { blockReference =>
       blocks(blockReference.hash).update {
-        case Some(majority: MajorityBlock) => majority.addUsage.some
-        case other                         => other
+        case Some(majority: MajorityBlock[A, B]) => majority.addUsage.some
+        case other                               => other
       }
     }.void
 
-  private def removeParentUsages(hashedBlock: Hashed[DAGBlock]): F[Unit] =
+  private def removeParentUsages(hashedBlock: Hashed[B]): F[Unit] =
     hashedBlock.parent.toList.traverse { blockReference =>
       blocks(blockReference.hash).modify {
-        case Some(majorityBlock: MajorityBlock) =>
+        case Some(majorityBlock: MajorityBlock[A, B]) =>
           (majorityBlock.removeUsage.some, ().asRight)
         case other => (other, TipUsageUpdateError(hashedBlock.proofsHash, blockReference.hash, other).asLeft)
       }
@@ -228,18 +232,22 @@ class BlockStorage[F[_]: Sync: Random](blocks: MapRef[F, ProofsHash, Option[Stor
 
 object BlockStorage {
 
-  def make[F[_]: Sync: Random]: F[BlockStorage[F]] =
-    MapRef.ofConcurrentHashMap[F, ProofsHash, StoredBlock]().map(new BlockStorage[F](_))
+  def make[F[_]: Sync: Random, A <: Transaction, B <: Block[A]]: F[BlockStorage[F, A, B]] =
+    MapRef.ofConcurrentHashMap[F, ProofsHash, StoredBlock[A, B]]().map(new BlockStorage[F, A, B](_))
 
-  sealed trait StoredBlock
-  case class WaitingBlock(block: Signed[DAGBlock]) extends StoredBlock
-  case class AcceptedBlock(block: Hashed[DAGBlock]) extends StoredBlock
-  case class MajorityBlock(blockReference: BlockReference, usages: NonNegLong, tipStatus: TipStatus) extends StoredBlock {
-    def addUsage: MajorityBlock = this.focus(_.usages).modify(usages => NonNegLong.unsafeFrom(usages + 1L))
+  def make[F[_]: Sync: Random, A <: Transaction, B <: Block[A]](blocks: Map[ProofsHash, StoredBlock[A, B]]): F[BlockStorage[F, A, B]] =
+    MapRef.ofSingleImmutableMap(blocks).map(new BlockStorage[F, A, B](_))
 
-    def removeUsage: MajorityBlock =
+  sealed trait StoredBlock[A <: Transaction, B <: Block[A]]
+  case class WaitingBlock[A <: Transaction, B <: Block[A]](block: Signed[B]) extends StoredBlock[A, B]
+  case class AcceptedBlock[A <: Transaction, B <: Block[A]](block: Hashed[B]) extends StoredBlock[A, B]
+  case class MajorityBlock[A <: Transaction, B <: Block[A]](blockReference: BlockReference, usages: NonNegLong, tipStatus: TipStatus)
+      extends StoredBlock[A, B] {
+    def addUsage: MajorityBlock[A, B] = this.focus(_.usages).modify(usages => NonNegLong.unsafeFrom(usages + 1L))
+
+    def removeUsage: MajorityBlock[A, B] =
       this.focus(_.usages).modify(usages => NonNegLong.from(usages - 1L).toOption.getOrElse(NonNegLong.MinValue))
-    def deprecate: MajorityBlock = this.focus(_.tipStatus).replace(Deprecated)
+    def deprecate: MajorityBlock[A, B] = this.focus(_.tipStatus).replace(Deprecated)
   }
 
   case class MajorityReconciliationData(
@@ -258,63 +266,76 @@ object BlockStorage {
     val errorMessage: String
     override def getMessage: String = errorMessage
   }
-  case class TipUsageUpdateError(child: ProofsHash, parent: ProofsHash, encountered: Option[StoredBlock])(
-    implicit s: Show[StoredBlock]
+  case class TipUsageUpdateError[A <: Transaction, B <: Block[A]](
+    child: ProofsHash,
+    parent: ProofsHash,
+    encountered: Option[StoredBlock[A, B]]
+  )(
+    implicit s: Show[StoredBlock[A, B]]
   ) extends BlockStorageError {
 
     val errorMessage: String =
       s"Parent block with hash=${parent.show} not found in majority when updating usage! Child hash=${child.show}. Encountered state: ${encountered.show}"
   }
-  case class BlockAcceptanceError(hash: ProofsHash, encountered: Option[StoredBlock])(implicit s: Show[StoredBlock])
-      extends BlockStorageError {
+  case class BlockAcceptanceError[A <: Transaction, B <: Block[A]](hash: ProofsHash, encountered: Option[StoredBlock[A, B]])(
+    implicit s: Show[StoredBlock[A, B]]
+  ) extends BlockStorageError {
 
     val errorMessage: String =
       s"Block with hash=${hash.show} failed to transition state to Accepted! Encountered state: ${encountered.show}."
   }
-  case class BlockAlreadyStoredError(hash: ProofsHash, encountered: Option[StoredBlock])(implicit s: Show[StoredBlock])
-      extends BlockStorageError {
+  case class BlockAlreadyStoredError[A <: Transaction, B <: Block[A]](hash: ProofsHash, encountered: Option[StoredBlock[A, B]])(
+    implicit s: Show[StoredBlock[A, B]]
+  ) extends BlockStorageError {
 
     val errorMessage: String =
       s"Block with hash=${hash.show} is already stored. Encountered state: ${encountered.show}."
   }
   sealed trait BlockMajorityUpdateError extends BlockStorageError
-  case class UnexpectedBlockStateWhenMarkingAsMajority(hash: ProofsHash, got: Option[StoredBlock]) extends BlockMajorityUpdateError {
+  case class UnexpectedBlockStateWhenMarkingAsMajority[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends BlockMajorityUpdateError {
     val errorMessage: String = s"Accepted block to be marked as majority with hash: $hash not found! But got: $got"
   }
-  case class UnexpectedBlockStateWhenRemovingAccepted(hash: ProofsHash, got: Option[StoredBlock]) extends BlockMajorityUpdateError {
+  case class UnexpectedBlockStateWhenRemovingAccepted[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends BlockMajorityUpdateError {
 
     val errorMessage: String =
       s"Accepted block to be removed during majority update with hash: $hash not found! But got: $got"
   }
-  case class UnexpectedBlockStateWhenRemoving(hash: ProofsHash, got: Option[StoredBlock]) extends BlockMajorityUpdateError {
+  case class UnexpectedBlockStateWhenRemoving[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends BlockMajorityUpdateError {
 
     val errorMessage: String =
       s"Block to be removed during majority update with hash: $hash not found in expected state! But got: $got"
   }
-  case class UnexpectedBlockStateWhenResetting(hash: ProofsHash, got: Option[StoredBlock]) extends BlockMajorityUpdateError {
+  case class UnexpectedBlockStateWhenResetting[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends BlockMajorityUpdateError {
 
     val errorMessage: String =
       s"Block to be reset during majority update with hash: $hash not found in expected state! But got: $got"
   }
-  case class UnexpectedBlockStateWhenAddingMajorityBlock(hash: ProofsHash, got: Option[StoredBlock]) extends BlockMajorityUpdateError {
+  case class UnexpectedBlockStateWhenAddingMajorityBlock[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends BlockMajorityUpdateError {
 
     val errorMessage: String =
       s"Block to be added during majority update with hash: $hash not found in expected state! But got: $got"
   }
   sealed trait TipUpdateError extends BlockStorageError
-  case class TipDeprecatingError(hash: ProofsHash, got: Option[StoredBlock]) extends TipUpdateError {
+  case class TipDeprecatingError[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]]) extends TipUpdateError {
     override val errorMessage: String =
       s"Active tip to be deprecated with hash: $hash not found in expected state! But got: $got"
   }
-  case class TipRemovalError(hash: ProofsHash, got: Option[StoredBlock]) extends TipUpdateError {
+  case class TipRemovalError[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]]) extends TipUpdateError {
     override val errorMessage: String =
       s"Deprecated tip to be removed with hash: $hash not found in expected state! But got: $got"
   }
-  case class ActiveTipAddingError(hash: ProofsHash, got: Option[StoredBlock]) extends TipUpdateError {
+  case class ActiveTipAddingError[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends TipUpdateError {
     override val errorMessage: String =
       s"Active tip to be added with hash: $hash not found in expected state! But got: $got"
   }
-  case class DeprecatedTipAddingError(hash: ProofsHash, got: Option[StoredBlock]) extends TipUpdateError {
+  case class DeprecatedTipAddingError[A <: Transaction, B <: Block[A]](hash: ProofsHash, got: Option[StoredBlock[A, B]])
+      extends TipUpdateError {
     override val errorMessage: String =
       s"Deprecated tip to be added with hash: $hash not found in expected state! But got: $got"
   }

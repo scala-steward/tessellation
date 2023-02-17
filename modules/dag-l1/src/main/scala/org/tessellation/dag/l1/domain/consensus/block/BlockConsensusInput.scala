@@ -1,6 +1,9 @@
 package org.tessellation.dag.l1.domain.consensus.block
 
 import cats.Show
+import cats.syntax.functor._
+
+import scala.reflect.runtime.universe.TypeTag
 
 import org.tessellation.dag.domain.block.Tips
 import org.tessellation.dag.l1.domain.consensus.round.RoundId
@@ -10,32 +13,65 @@ import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.signature.Signed
 import org.tessellation.security.signature.signature.Signature
 
-import derevo.circe.magnolia.{decoder, encoder}
-import derevo.derive
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder}
 
 sealed trait BlockConsensusInput extends Ω
 
 object BlockConsensusInput {
   sealed trait OwnerBlockConsensusInput extends BlockConsensusInput
+  case object OwnRoundTrigger extends OwnerBlockConsensusInput
+  case object InspectionTrigger extends OwnerBlockConsensusInput
 
-  @derive(encoder, decoder)
-  sealed trait PeerBlockConsensusInput extends BlockConsensusInput {
+  sealed trait PeerBlockConsensusInput[+A <: Transaction] extends BlockConsensusInput {
     val senderId: PeerId
     val owner: PeerId
   }
-  case object OwnRoundTrigger extends OwnerBlockConsensusInput
-  case object InspectionTrigger extends OwnerBlockConsensusInput
-  case class Proposal(
+
+  object PeerBlockConsensusInput {
+    implicit def encoder[A <: Transaction: Encoder: TypeTag]: Encoder[PeerBlockConsensusInput[A]] =
+      Encoder.instance[PeerBlockConsensusInput[A]] {
+        case foo: Proposal[A]                 => foo.asJson(Proposal.encoder[A])
+        case foo: BlockSignatureProposal      => foo.asJson
+        case foo: CancelledBlockCreationRound => foo.asJson
+      }
+    implicit def decoder[A <: Transaction: Decoder: TypeTag]: Decoder[PeerBlockConsensusInput[A]] =
+      List[Decoder[PeerBlockConsensusInput[A]]](
+        Decoder[Proposal[A]].widen,
+        Decoder[BlockSignatureProposal].widen,
+        Decoder[CancelledBlockCreationRound].widen
+      ).reduceLeft(_ or _)
+  }
+
+  case class Proposal[A <: Transaction: TypeTag](
     roundId: RoundId,
     senderId: PeerId,
     owner: PeerId,
     facilitators: Set[PeerId],
-    transactions: Set[Signed[Transaction]],
+    transactions: Set[Signed[A]],
     tips: Tips
-  ) extends PeerBlockConsensusInput
-  case class BlockSignatureProposal(roundId: RoundId, senderId: PeerId, owner: PeerId, signature: Signature) extends PeerBlockConsensusInput
+  ) extends TypeTagged[Proposal[A]]
+      with PeerBlockConsensusInput[A]
+  object Proposal {
+    def extractor[A <: Transaction: TypeTag] = new TypeTaggedExtractor[Proposal[A]]
+    implicit def encoder[A <: Transaction: Encoder: TypeTag]: Encoder[Proposal[A]] = deriveEncoder
+    implicit def decoder[A <: Transaction: Decoder: TypeTag]: Decoder[Proposal[A]] = deriveDecoder
+  }
+  case class BlockSignatureProposal(roundId: RoundId, senderId: PeerId, owner: PeerId, signature: Signature)
+      extends PeerBlockConsensusInput[Nothing]
+
+  object BlockSignatureProposal {
+    implicit val encoder: Encoder[BlockSignatureProposal] = deriveEncoder
+    implicit val decoder: Decoder[BlockSignatureProposal] = deriveDecoder
+  }
   case class CancelledBlockCreationRound(roundId: RoundId, senderId: PeerId, owner: PeerId, reason: CancellationReason)
-      extends PeerBlockConsensusInput
+      extends PeerBlockConsensusInput[Nothing]
+
+  object CancelledBlockCreationRound {
+    implicit val encoder: Encoder[CancelledBlockCreationRound] = deriveEncoder
+    implicit val decoder: Decoder[CancelledBlockCreationRound] = deriveDecoder
+  }
 
   implicit val showBlockConsensusInput: Show[BlockConsensusInput] = {
     case OwnRoundTrigger   => "OwnRoundTrigger"

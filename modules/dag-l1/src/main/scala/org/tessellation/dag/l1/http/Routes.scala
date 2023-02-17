@@ -1,22 +1,28 @@
 package org.tessellation.dag.l1.http
 
+import cats.Show
 import cats.effect.Async
 import cats.effect.std.{Queue, Supervisor}
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.show._
 
+import scala.reflect.runtime.universe.TypeTag
+
+import org.tessellation.dag.domain.block.Block
 import org.tessellation.dag.l1.domain.consensus.block.BlockConsensusInput.PeerBlockConsensusInput
 import org.tessellation.dag.l1.domain.transaction.{TransactionService, TransactionStorage, transactionLoggerName}
 import org.tessellation.ext.http4s.{AddressVar, HashVar}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.http.{ErrorCause, ErrorResponse}
+import org.tessellation.schema.transaction.TransactionView.encoder
 import org.tessellation.schema.transaction.{Transaction, TransactionStatus, TransactionView}
 import org.tessellation.sdk.domain.cluster.storage.L0ClusterStorage
 import org.tessellation.security.signature.Signed
 
 import io.circe.shapes._
 import io.circe.syntax.EncoderOps
+import io.circe.{Decoder, Encoder}
 import org.http4s.HttpRoutes
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe._
@@ -25,11 +31,11 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import shapeless._
 import shapeless.syntax.singleton._
 
-final case class Routes[F[_]: Async: KryoSerializer](
-  transactionService: TransactionService[F],
-  transactionStorage: TransactionStorage[F],
+final case class Routes[F[_]: Async: KryoSerializer, A <: Transaction: Decoder: Encoder: Show: TypeTag, B <: Block[A]](
+  transactionService: TransactionService[F, A],
+  transactionStorage: TransactionStorage[F, A],
   l0ClusterStorage: L0ClusterStorage[F],
-  peerBlockConsensusInputQueue: Queue[F, Signed[PeerBlockConsensusInput]]
+  peerBlockConsensusInputQueue: Queue[F, Signed[PeerBlockConsensusInput[A]]]
 )(implicit S: Supervisor[F])
     extends Http4sDsl[F] {
 
@@ -38,7 +44,7 @@ final case class Routes[F[_]: Async: KryoSerializer](
   private val public: HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "transactions" =>
       for {
-        transaction <- req.as[Signed[Transaction]]
+        transaction <- req.as[Signed[A]]
         hashedTransaction <- transaction.toHashed[F]
         response <- transactionService
           .offer(hashedTransaction)
@@ -73,7 +79,7 @@ final case class Routes[F[_]: Async: KryoSerializer](
   private val p2p: HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "consensus" / "data" =>
       for {
-        peerBlockConsensusInput <- req.as[Signed[PeerBlockConsensusInput]]
+        peerBlockConsensusInput <- req.as[Signed[PeerBlockConsensusInput[A]]]
         _ <- S.supervise(peerBlockConsensusInputQueue.offer(peerBlockConsensusInput))
         response <- Ok()
       } yield response

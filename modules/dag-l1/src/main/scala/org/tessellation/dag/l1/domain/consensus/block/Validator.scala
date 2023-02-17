@@ -6,6 +6,7 @@ import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.{Applicative, Monad}
 
+import org.tessellation.dag.domain.block.Block
 import org.tessellation.dag.l1.domain.block.BlockStorage
 import org.tessellation.dag.l1.domain.consensus.block.BlockConsensusInput.PeerBlockConsensusInput
 import org.tessellation.dag.l1.domain.consensus.block.storage.ConsensusStorage
@@ -14,6 +15,7 @@ import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.node.NodeState.Ready
 import org.tessellation.schema.peer.PeerId
+import org.tessellation.schema.transaction.Transaction
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
 import org.tessellation.sdk.domain.node.NodeStorage
 import org.tessellation.security.SecurityProvider
@@ -37,23 +39,23 @@ object Validator {
       .map(_.filter(p => isReadyForBlockConsensus(p.state)))
       .map(_.size >= peersCount)
 
-  private def enoughTipsForConsensus[F[_]: Monad](
-    blockStorage: BlockStorage[F],
+  private def enoughTipsForConsensus[F[_]: Monad, A <: Transaction, B <: Block[A]](
+    blockStorage: BlockStorage[F, A, B],
     tipsCount: PosInt
   ): F[Boolean] =
     blockStorage.getTips(tipsCount).map(_.isDefined)
 
-  private def atLeastOneTransaction[F[_]: Monad](
-    transactionStorage: TransactionStorage[F]
+  private def atLeastOneTransaction[F[_]: Monad, A <: Transaction](
+    transactionStorage: TransactionStorage[F, A]
   ): F[Boolean] =
     transactionStorage.countAllowedForConsensus.map(_ >= 1)
 
-  def canStartOwnConsensus[F[_]: Monad: Async](
-    consensusStorage: ConsensusStorage[F],
+  def canStartOwnConsensus[F[_]: Monad: Async, A <: Transaction, B <: Block[A]](
+    consensusStorage: ConsensusStorage[F, A, B],
     nodeStorage: NodeStorage[F],
     clusterStorage: ClusterStorage[F],
-    blockStorage: BlockStorage[F],
-    transactionStorage: TransactionStorage[F],
+    blockStorage: BlockStorage[F, A, B],
+    transactionStorage: TransactionStorage[F, A],
     peersCount: PosInt,
     tipsCount: PosInt
   ): F[Boolean] =
@@ -78,8 +80,8 @@ object Validator {
         }
     } yield res
 
-  def isPeerInputValid[F[_]: Async: KryoSerializer: SecurityProvider](
-    input: Signed[PeerBlockConsensusInput]
+  def isPeerInputValid[F[_]: Async: KryoSerializer: SecurityProvider, A <: Transaction](
+    input: Signed[PeerBlockConsensusInput[A]]
   ): F[Boolean] =
     for {
       hasValidSignature <- input.hasValidSignature

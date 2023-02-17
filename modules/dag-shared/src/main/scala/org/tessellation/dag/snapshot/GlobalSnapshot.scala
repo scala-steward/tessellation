@@ -7,14 +7,14 @@ import cats.syntax.traverse._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 
-import org.tessellation.dag.domain.block.BlockReference
+import org.tessellation.dag.domain.block._
 import org.tessellation.dag.snapshot.epoch.EpochProgress
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.Balance
 import org.tessellation.schema.height.{Height, SubHeight}
 import org.tessellation.schema.peer.PeerId
-import org.tessellation.schema.transaction.RewardTransaction
+import org.tessellation.schema.transaction.{DAGTransaction, RewardTransaction, TransactionReference}
 import org.tessellation.security.hash.{Hash, ProofsHash}
 import org.tessellation.security.hex.Hex
 import org.tessellation.syntax.sortedCollection._
@@ -25,25 +25,57 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.PosInt
 
+sealed trait Snapshot[A <: Block[_]] {
+  val ordinal: SnapshotOrdinal
+  val height: Height
+  val subHeight: SubHeight
+  val lastSnapshotHash: Hash
+  val blocks: SortedSet[BlockAsActiveTip[A]]
+  val tips: GlobalSnapshotTips
+
+  def getBalances: Map[Address, Balance]
+  def getLastTxRefs: Map[Address, TransactionReference]
+}
+
+case class CurrencySnapshot(
+  ordinal: SnapshotOrdinal,
+  height: Height,
+  subHeight: SubHeight,
+  lastSnapshotHash: Hash,
+  blocks: SortedSet[BlockAsActiveTip[CurrencyBlock]],
+  lastTxRefs: SortedMap[Address, TransactionReference],
+  balances: SortedMap[Address, Balance],
+  tips: GlobalSnapshotTips
+) extends Snapshot[CurrencyBlock] {
+
+  override def getBalances: Map[Address, Balance] = balances
+
+  override def getLastTxRefs: Map[Address, TransactionReference] = lastTxRefs
+}
+
 @derive(eqv, show, encoder, decoder)
 case class GlobalSnapshot(
   ordinal: SnapshotOrdinal,
   height: Height,
   subHeight: SubHeight,
   lastSnapshotHash: Hash,
-  blocks: SortedSet[BlockAsActiveTip],
+  blocks: SortedSet[BlockAsActiveTip[DAGBlock]],
   stateChannelSnapshots: SortedMap[Address, NonEmptyList[StateChannelSnapshotBinary]],
   rewards: SortedSet[RewardTransaction],
   epochProgress: EpochProgress,
   nextFacilitators: NonEmptyList[PeerId],
   info: GlobalSnapshotInfo,
   tips: GlobalSnapshotTips
-) {
+) extends Snapshot[DAGBlock] {
+
+  override def getBalances: Map[Address, Balance] = info.balances
+
+  override def getLastTxRefs: Map[Address, TransactionReference] = info.lastTxRefs
 
   def activeTips[F[_]: Async: KryoSerializer]: F[SortedSet[ActiveTip]] =
     blocks.toList.traverse { blockAsActiveTip =>
       BlockReference
-        .of(blockAsActiveTip.block)
+        .of[F, DAGTransaction, DAGBlock](blockAsActiveTip.block)
         .map(blockRef => ActiveTip(blockRef, blockAsActiveTip.usageCount, ordinal))
     }.map(_.toSortedSet.union(tips.remainedActive))
 
@@ -57,7 +89,7 @@ object GlobalSnapshot {
       Height.MinValue,
       SubHeight.MinValue,
       Coinbase.hash,
-      SortedSet.empty,
+      SortedSet.empty[BlockAsActiveTip[DAGBlock]],
       SortedMap.empty,
       SortedSet.empty,
       startingEpochProgress,

@@ -9,6 +9,7 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 
 import org.tessellation.config.types.AppConfig
+import org.tessellation.dag.domain.block.DAGBlock
 import org.tessellation.domain.dag.DAGService
 import org.tessellation.domain.rewards.Rewards
 import org.tessellation.infrastructure.dag.DAGService
@@ -16,6 +17,7 @@ import org.tessellation.infrastructure.rewards._
 import org.tessellation.infrastructure.snapshot._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.peer.PeerId
+import org.tessellation.schema.transaction.DAGTransaction
 import org.tessellation.sdk.domain.cluster.services.{Cluster, Session}
 import org.tessellation.sdk.domain.collateral.Collateral
 import org.tessellation.sdk.domain.gossip.Gossip
@@ -34,7 +36,7 @@ object Services {
     sdkServices: SdkServices[F],
     queues: Queues[F],
     storages: Storages[F],
-    validators: Validators[F],
+    validators: Validators[F, DAGTransaction, DAGBlock],
     client: Client[F],
     session: Session[F],
     seedlist: Option[Set[PeerId]],

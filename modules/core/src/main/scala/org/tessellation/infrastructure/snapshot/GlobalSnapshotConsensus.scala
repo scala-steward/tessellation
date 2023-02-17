@@ -9,11 +9,13 @@ import cats.syntax.option._
 import org.tessellation.config.types.SnapshotConfig
 import org.tessellation.dag.block.BlockValidator
 import org.tessellation.dag.block.processing.BlockAcceptanceManager
+import org.tessellation.dag.domain.block.DAGBlock
 import org.tessellation.domain.rewards.Rewards
 import org.tessellation.domain.snapshot.GlobalSnapshotStorage
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.balance.Amount
 import org.tessellation.schema.peer.PeerId
+import org.tessellation.schema.transaction.DAGTransaction
 import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types.HealthCheckConfig
 import org.tessellation.sdk.domain.cluster.services.Session
@@ -38,7 +40,7 @@ object GlobalSnapshotConsensus {
     clusterStorage: ClusterStorage[F],
     nodeStorage: NodeStorage[F],
     globalSnapshotStorage: GlobalSnapshotStorage[F],
-    blockValidator: BlockValidator[F],
+    blockValidator: BlockValidator[F, DAGTransaction, DAGBlock],
     healthCheckConfig: HealthCheckConfig,
     snapshotConfig: SnapshotConfig,
     environment: AppEnvironment,
@@ -49,7 +51,7 @@ object GlobalSnapshotConsensus {
     Consensus.make[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact](
       GlobalSnapshotConsensusFunctions.make[F](
         globalSnapshotStorage,
-        BlockAcceptanceManager.make[F](blockValidator),
+        BlockAcceptanceManager.make[F, DAGTransaction, DAGBlock](blockValidator),
         collateral,
         rewards,
         environment

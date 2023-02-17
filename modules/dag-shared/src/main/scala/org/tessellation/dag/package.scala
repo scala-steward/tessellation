@@ -24,10 +24,14 @@ package object dag {
     classOf[GlobalSnapshotTips] -> 607,
     classOf[ActiveTip] -> 608,
     ActiveTip.OrderingInstance.getClass -> 609,
-    classOf[BlockAsActiveTip] -> 610,
-    BlockAsActiveTip.OrderingInstance.getClass -> 611,
+    classOf[BlockAsActiveTip[_]] -> 610,
+    BlockAsActiveTip.OrderingInstanceBSATForDAGBlock.getClass -> 611,
     classOf[DeprecatedTip] -> 612,
     DeprecatedTip.OrderingInstance.getClass -> 613,
-    classOf[Tips] -> 614
+    classOf[Tips] -> 614,
+    classOf[CurrencyBlock] -> 615,
+    CurrencyBlock.OrderingInstance.getClass -> 616,
+    BlockAsActiveTip.OrderingInstanceBSATForCurrencyBlock.getClass -> 617,
+    classOf[CurrencySnapshot] -> 618
   )
 }

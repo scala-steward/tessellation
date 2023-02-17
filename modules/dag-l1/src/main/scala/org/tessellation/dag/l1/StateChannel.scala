@@ -2,8 +2,7 @@ package org.tessellation.dag.l1
 
 import java.security.KeyPair
 
-import cats.Applicative
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.Async
 import cats.effect.std.{Random, Semaphore}
 import cats.syntax.applicative._
@@ -15,48 +14,62 @@ import cats.syntax.order._
 import cats.syntax.show._
 import cats.syntax.traverse._
 import cats.syntax.traverseFilter._
+import cats.{Applicative, Order}
 
 import scala.concurrent.duration.DurationInt
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
+import org.tessellation.dag.domain.block.{Block, BlockReference}
 import org.tessellation.dag.l1.config.types.AppConfig
 import org.tessellation.dag.l1.domain.consensus.block.BlockConsensusInput._
 import org.tessellation.dag.l1.domain.consensus.block.BlockConsensusOutput.{CleanedConsensuses, FinalBlock}
+import org.tessellation.dag.l1.domain.consensus.block.CoalgebraCommand.ProcessProposal
 import org.tessellation.dag.l1.domain.consensus.block.Validator.{canStartOwnConsensus, isPeerInputValid}
-import org.tessellation.dag.l1.domain.consensus.block.{BlockConsensusCell, BlockConsensusContext, BlockConsensusInput}
+import org.tessellation.dag.l1.domain.consensus.block._
 import org.tessellation.dag.l1.domain.snapshot.programs.SnapshotProcessor.SnapshotProcessingResult
 import org.tessellation.dag.l1.http.p2p.P2PClient
 import org.tessellation.dag.l1.modules._
-import org.tessellation.dag.snapshot.{GlobalSnapshot, GlobalSnapshotReference}
+import org.tessellation.dag.snapshot.{GlobalSnapshot, GlobalSnapshotReference, Snapshot}
 import org.tessellation.ext.fs2.StreamOps
 import org.tessellation.kernel.Cell.NullTerminal
 import org.tessellation.kernel.{CellError, Ω}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.height.Height
 import org.tessellation.schema.peer.PeerId
+import org.tessellation.schema.transaction.Transaction
+import org.tessellation.security.signature.Signed
 import org.tessellation.security.{Hashed, SecurityProvider}
 
 import fs2.{Pipe, Stream}
+import io.circe.Encoder
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
+class StateChannel[
+  F[_]: Async: KryoSerializer: SecurityProvider: Random,
+  A <: Transaction: Order: Ordering: TypeTag: Encoder,
+  B <: Block[A]: TypeTag: Encoder,
+  C <: Snapshot[B]
+](
   appConfig: AppConfig,
   blockAcceptanceS: Semaphore[F],
   blockCreationS: Semaphore[F],
   blockStoringS: Semaphore[F],
   keyPair: KeyPair,
-  p2PClient: P2PClient[F],
-  programs: Programs[F],
-  queues: Queues[F],
+  p2PClient: P2PClient[F, A, B],
+  programs: Programs[F, A, B, C],
+  queues: Queues[F, A, B],
   selfId: PeerId,
-  services: Services[F],
-  storages: Storages[F],
-  validators: Validators[F]
+  services: Services[F, A, B],
+  storages: Storages[F, A, B, C],
+  validators: Validators[F, A, B],
+  createBlock: (NonEmptyList[BlockReference], NonEmptySet[Signed[A]]) => Option[B]
 ) {
 
   private implicit val logger = Slf4jLogger.getLogger[F]
 
   private val blockConsensusContext =
-    BlockConsensusContext[F](
+    BlockConsensusContext[F, A, B](
       p2PClient.blockConsensus,
       storages.block,
       validators.block,
@@ -66,7 +79,8 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
       keyPair,
       selfId,
       storages.transaction,
-      validators.transaction
+      validators.transaction,
+      createBlock
     )
 
   private val inspectionTriggerInput: Stream[F, OwnerBlockConsensusInput] = Stream
@@ -91,10 +105,10 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
     .filter(identity)
     .as(OwnRoundTrigger)
 
-  private val peerDiscovery: Stream[F, Unit] = Stream
+  private val l0PeerDiscovery: Stream[F, Unit] = Stream
     .awakeEvery(10.seconds)
     .evalMap { _ =>
-      storages.lastGlobalSnapshotStorage.get.flatMap {
+      storages.lastSnapshot.get.flatMap {
         _.fold(Applicative[F].unit) { latestSnapshot =>
           programs.l0PeerDiscovery.discover(latestSnapshot.signed.proofs.map(_.id).map(PeerId._Id.reverseGet))
         }
@@ -104,7 +118,7 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
   private val ownerBlockConsensusInputs: Stream[F, OwnerBlockConsensusInput] =
     inspectionTriggerInput.merge(ownRoundTriggerInput)
 
-  private val peerBlockConsensusInputs: Stream[F, PeerBlockConsensusInput] = Stream
+  private val peerBlockConsensusInputs: Stream[F, PeerBlockConsensusInput[A]] = Stream
     .fromQueueUnterminated(queues.peerBlockConsensusInput)
     .evalFilter(isPeerInputValid(_))
     .map(_.value)
@@ -112,10 +126,16 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
   private val blockConsensusInputs: Stream[F, BlockConsensusInput] =
     ownerBlockConsensusInputs.merge(peerBlockConsensusInputs)
 
-  private val runConsensus: Pipe[F, BlockConsensusInput, FinalBlock] =
+  private val runConsensus: Pipe[F, BlockConsensusInput, FinalBlock[A, B]] =
     _.evalTap(input => logger.debug(s"Received block consensus input to process: ${input.show}"))
       .evalMap(
-        new BlockConsensusCell[F](_, blockConsensusContext)
+        new BlockConsensusCell[F, A, B](
+          _,
+          blockConsensusContext,
+          AlgebraCommand.extractor[A, B],
+          ProcessProposal.extractor[A],
+          Proposal.extractor[A]
+        )
           .run()
           .handleErrorWith(e => CellError(e.getMessage).asLeft[Ω].pure[F])
       )
@@ -124,10 +144,11 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
           Stream.eval(logger.warn(ce)(s"Error occurred during some step of block consensus.")) >>
             Stream.empty
         case Right(ohm) =>
+          val fbExt = FinalBlock.extractor[A, B]
           ohm match {
-            case fb @ FinalBlock(hashedBlock) =>
+            case fbExt(fb) =>
               Stream
-                .eval(logger.debug(s"Block created! Hash=${hashedBlock.hash} ProofsHash=${hashedBlock.proofsHash}"))
+                .eval(logger.debug(s"Block created! Hash=${fb.hashedBlock.hash} ProofsHash=${fb.hashedBlock.proofsHash}"))
                 .as(fb)
             case CleanedConsensuses(ids) =>
               Stream.eval(logger.warn(s"Cleaned following timed-out consensuses: $ids")) >>
@@ -139,14 +160,14 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
           }
       }
 
-  private val gossipBlock: Pipe[F, FinalBlock, FinalBlock] =
+  private val gossipBlock: Pipe[F, FinalBlock[A, B], FinalBlock[A, B]] =
     _.evalTap { fb =>
       services.gossip
         .spreadCommon(fb.hashedBlock.signed)
         .handleErrorWith(e => logger.warn(e)("Block gossip spread failed!"))
     }
 
-  private val peerBlocks: Stream[F, FinalBlock] = Stream
+  private val peerBlocks: Stream[F, FinalBlock[A, B]] = Stream
     .fromQueueUnterminated(queues.peerBlock)
     .evalMap(_.toHashedWithSignatureCheck)
     .evalTap {
@@ -154,12 +175,12 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
       case Right(_) => Async[F].unit
     }
     .collect {
-      case Right(hashedBlock) => FinalBlock(hashedBlock)
+      case Right(hashedBlock) => FinalBlock[A, B](hashedBlock)
     }
 
-  private val storeBlock: Pipe[F, FinalBlock, Unit] =
+  private val storeBlock: Pipe[F, FinalBlock[A, B], Unit] =
     _.evalMapLocked(blockStoringS) { fb =>
-      storages.lastGlobalSnapshotStorage.getHeight.map(_.getOrElse(Height.MinValue)).flatMap { lastSnapshotHeight =>
+      storages.lastSnapshot.getHeight.map(_.getOrElse(Height.MinValue)).flatMap { lastSnapshotHeight =>
         if (lastSnapshotHeight < fb.hashedBlock.height)
           storages.block.store(fb.hashedBlock).handleErrorWith(e => logger.debug(e)("Block storing failed."))
         else
@@ -169,7 +190,8 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
       }
     }
 
-  private val sendBlockToL0: Pipe[F, FinalBlock, FinalBlock] =
+  // TODO: Send to state channel L0 not global L0
+  private val sendBlockToL0: Pipe[F, FinalBlock[A, B], FinalBlock[A, B]] =
     _.evalTap { fb =>
       for {
         l0PeerOpt <- storages.l0Cluster.getPeers
@@ -207,6 +229,7 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
       )
     }
 
+  // TODO: process global snapshot and state channel snapshot
   private val globalSnapshotProcessing: Stream[F, Unit] = Stream
     .awakeEvery(10.seconds)
     .evalMap(_ => services.l0.pullGlobalSnapshots)
@@ -242,29 +265,35 @@ class StateChannel[F[_]: Async: KryoSerializer: SecurityProvider: Random](
     blockConsensus
       .merge(blockAcceptance)
       .merge(globalSnapshotProcessing)
-      .merge(peerDiscovery)
+      .merge(l0PeerDiscovery)
 
 }
 
 object StateChannel {
 
-  def make[F[_]: Async: KryoSerializer: SecurityProvider: Random](
+  def make[
+    F[_]: Async: KryoSerializer: SecurityProvider: Random,
+    A <: Transaction: Order: Ordering: TypeTag: ClassTag: Encoder,
+    B <: Block[A]: TypeTag: Encoder,
+    C <: Snapshot[B]
+  ](
     appConfig: AppConfig,
     keyPair: KeyPair,
-    p2PClient: P2PClient[F],
-    programs: Programs[F],
-    queues: Queues[F],
+    p2PClient: P2PClient[F, A, B],
+    programs: Programs[F, A, B, C],
+    queues: Queues[F, A, B],
     selfId: PeerId,
-    services: Services[F],
-    storages: Storages[F],
-    validators: Validators[F]
-  ): F[StateChannel[F]] =
+    services: Services[F, A, B],
+    storages: Storages[F, A, B, C],
+    validators: Validators[F, A, B],
+    createBlock: (NonEmptyList[BlockReference], NonEmptySet[Signed[A]]) => Option[B]
+  ): F[StateChannel[F, A, B, C]] =
     for {
       blockAcceptanceS <- Semaphore(1)
       blockCreationS <- Semaphore(1)
       blockStoringS <- Semaphore(1)
     } yield
-      new StateChannel[F](
+      new StateChannel[F, A, B, C](
         appConfig,
         blockAcceptanceS,
         blockCreationS,
@@ -276,6 +305,7 @@ object StateChannel {
         selfId,
         services,
         storages,
-        validators
+        validators,
+        createBlock
       )
 }

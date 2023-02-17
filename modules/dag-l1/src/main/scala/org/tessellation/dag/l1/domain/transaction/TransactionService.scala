@@ -14,19 +14,19 @@ import org.tessellation.schema.transaction.Transaction
 import org.tessellation.security.Hashed
 import org.tessellation.security.hash.Hash
 
-trait TransactionService[F[_]] {
-  def offer(transaction: Hashed[Transaction]): F[Either[NonEmptyList[ContextualTransactionValidationError], Hash]]
+trait TransactionService[F[_], A <: Transaction] {
+  def offer(transaction: Hashed[A]): F[Either[NonEmptyList[ContextualTransactionValidationError], Hash]]
 }
 
 object TransactionService {
 
-  def make[F[_]: Async](
-    transactionStorage: TransactionStorage[F],
-    contextualTransactionValidator: ContextualTransactionValidator[F]
-  ): TransactionService[F] = new TransactionService[F] {
+  def make[F[_]: Async, A <: Transaction](
+    transactionStorage: TransactionStorage[F, A],
+    contextualTransactionValidator: ContextualTransactionValidator[F, A]
+  ): TransactionService[F, A] = new TransactionService[F, A] {
 
     def offer(
-      transaction: Hashed[Transaction]
+      transaction: Hashed[A]
     ): F[Either[NonEmptyList[ContextualTransactionValidationError], Hash]] =
       contextualTransactionValidator.validate(transaction.signed).flatMap {
         case Valid(_) =>

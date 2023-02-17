@@ -22,6 +22,7 @@ import enumeratum._
 import eu.timepit.refined.auto.{autoInfer, autoRefineV, autoUnwrap}
 import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import io.circe.generic.semiauto.deriveEncoder
 import io.circe.{Decoder, Encoder}
 import io.estatico.newtype.macros.newtype
 import io.estatico.newtype.ops._
@@ -86,17 +87,15 @@ object transaction {
     fee: TransactionFee
   )
 
-  @derive(decoder, encoder, order, show)
-  case class Transaction(
-    source: Address,
-    destination: Address,
-    amount: TransactionAmount,
-    fee: TransactionFee,
-    parent: TransactionReference,
-    salt: TransactionSalt
-  ) extends Fiber[TransactionReference, TransactionData]
-      with Encodable {
+  trait Transaction extends Fiber[TransactionReference, TransactionData] with Encodable {
     import Transaction._
+
+    val source: Address
+    val destination: Address
+    val amount: TransactionAmount
+    val fee: TransactionFee
+    val parent: TransactionReference
+    val salt: TransactionSalt
 
     def reference = parent
     def data = TransactionData(source, destination, amount, fee)
@@ -116,24 +115,50 @@ object transaction {
           )
         )
 
-    val ordinal: TransactionOrdinal = _ParentOrdinal.get(this).next
+    val ordinal: TransactionOrdinal = parent.ordinal.next
+  }
+
+  @derive(decoder, encoder, order, show)
+  case class DAGTransaction(
+    source: Address,
+    destination: Address,
+    amount: TransactionAmount,
+    fee: TransactionFee,
+    parent: TransactionReference,
+    salt: TransactionSalt
+  ) extends Transaction
+
+  object DAGTransaction {
+    implicit object OrderingInstance extends OrderBasedOrdering[DAGTransaction]
+
+    val _Source: Lens[DAGTransaction, Address] = GenLens[DAGTransaction](_.source)
+    val _Destination: Lens[DAGTransaction, Address] = GenLens[DAGTransaction](_.destination)
+
+    val _Amount: Lens[DAGTransaction, TransactionAmount] = GenLens[DAGTransaction](_.amount)
+    val _Fee: Lens[DAGTransaction, TransactionFee] = GenLens[DAGTransaction](_.fee)
+    val _Parent: Lens[DAGTransaction, TransactionReference] = GenLens[DAGTransaction](_.parent)
+
+    val _ParentHash: Lens[DAGTransaction, Hash] = _Parent.andThen(TransactionReference._Hash)
+    val _ParentOrdinal: Lens[DAGTransaction, TransactionOrdinal] = _Parent.andThen(TransactionReference._Ordinal)
+  }
+
+  @derive(decoder, encoder, order, show)
+  case class CurrencyTransaction(
+    source: Address,
+    destination: Address,
+    amount: TransactionAmount,
+    fee: TransactionFee,
+    parent: TransactionReference,
+    salt: TransactionSalt
+  ) extends Transaction
+
+  object CurrencyTransaction {
+    implicit object OrderingInstance extends OrderBasedOrdering[CurrencyTransaction]
   }
 
   object Transaction {
 
-    implicit object OrderingInstance extends OrderBasedOrdering[Transaction]
-
     def runLengthEncoding(hashes: Seq[String]): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
-
-    val _Source: Lens[Transaction, Address] = GenLens[Transaction](_.source)
-    val _Destination: Lens[Transaction, Address] = GenLens[Transaction](_.destination)
-
-    val _Amount: Lens[Transaction, TransactionAmount] = GenLens[Transaction](_.amount)
-    val _Fee: Lens[Transaction, TransactionFee] = GenLens[Transaction](_.fee)
-    val _Parent: Lens[Transaction, TransactionReference] = GenLens[Transaction](_.parent)
-
-    val _ParentHash: Lens[Transaction, Hash] = _Parent.andThen(TransactionReference._Hash)
-    val _ParentOrdinal: Lens[Transaction, TransactionOrdinal] = _Parent.andThen(TransactionReference._Ordinal)
   }
 
   @derive(decoder, encoder, order, show)
@@ -146,12 +171,15 @@ object transaction {
     implicit object OrderingInstance extends OrderBasedOrdering[RewardTransaction]
   }
 
-  @derive(decoder, encoder, show)
-  case class TransactionView(
-    transaction: Transaction,
+  case class TransactionView[A <: Transaction](
+    transaction: A,
     hash: Hash,
     status: TransactionStatus
   )
+
+  object TransactionView {
+    implicit def encoder[A <: Transaction: Encoder]: Encoder[TransactionView[A]] = deriveEncoder
+  }
 
   @derive(eqv, show)
   sealed trait TransactionStatus extends EnumEntry

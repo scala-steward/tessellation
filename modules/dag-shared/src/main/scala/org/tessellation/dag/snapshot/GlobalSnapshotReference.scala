@@ -19,7 +19,7 @@ case class GlobalSnapshotReference(
 
 object GlobalSnapshotReference {
 
-  def fromHashedGlobalSnapshot(snapshot: Hashed[GlobalSnapshot]): GlobalSnapshotReference =
+  def fromHashedGlobalSnapshot(snapshot: Hashed[Snapshot[_]]): GlobalSnapshotReference =
     GlobalSnapshotReference(
       snapshot.height,
       snapshot.subHeight,

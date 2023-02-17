@@ -74,8 +74,6 @@ object GlobalSnapshotStorage {
       .flatMap { rollbackSnapshot =>
         makeResources().flatMap {
           case (headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, logger) =>
-            implicit val l = logger
-
             headRef.set(rollbackSnapshot.some) >>
               ordinalCache(rollbackSnapshot.ordinal).set(rollbackHash.some) >>
               hashCache(rollbackHash).set(rollbackSnapshot.some) >>
@@ -97,8 +95,6 @@ object GlobalSnapshotStorage {
   )(implicit S: Supervisor[F]): F[GlobalSnapshotStorage[F] with LatestBalances[F]] =
     makeResources().flatMap {
       case (headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, logger) =>
-        implicit val l = logger
-
         make(headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, globalSnapshotLocalFileSystemStorage, inMemoryCapacity)
     }
 
