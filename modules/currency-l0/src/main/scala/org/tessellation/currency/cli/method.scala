@@ -3,25 +3,26 @@ package org.tessellation.currency.cli
 import cats.syntax.contravariantSemigroupal._
 
 import scala.concurrent.duration._
-
 import org.tessellation.cli.env.{KeyAlias, Password, StorePath}
 import org.tessellation.currency.config.types.AppConfig
 import org.tessellation.ext.decline.WithOpts
 import org.tessellation.ext.decline.decline._
 import org.tessellation.schema.balance.Amount
 import org.tessellation.schema.node.NodeState
-import org.tessellation.sdk.cli.{CliMethod, CollateralAmountOpts, snapshot}
+import org.tessellation.schema.peer.L0Peer
 import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types._
-
 import com.monovore.decline.Opts
 import eu.timepit.refined.auto._
 import fs2.io.file.Path
+import org.tessellation.sdk.cli.{CliMethod, CollateralAmountOpts, L0PeerOpts, snapshot}
 
 object method {
 
   sealed trait Run extends CliMethod {
     val snapshotConfig: SnapshotConfig
+
+    val l0Peer: L0Peer
 
     val appConfig: AppConfig = AppConfig(
       environment = environment,
@@ -47,7 +48,8 @@ object method {
       ),
       healthCheck = healthCheckConfig(false),
       snapshot = snapshotConfig,
-      collateral = collateralConfig(environment, collateralAmount)
+      collateral = collateralConfig(environment, collateralAmount),
+      l0Peer = l0Peer
     )
 
     val stateAfterJoining: NodeState = NodeState.WaitingForDownload
@@ -63,7 +65,8 @@ object method {
     snapshotConfig: SnapshotConfig,
     genesisPath: Path,
     seedlistPath: Option[Path],
-    collateralAmount: Option[Amount]
+    collateralAmount: Option[Amount],
+    l0Peer: L0Peer
   ) extends Run
 
   object RunGenesis extends WithOpts[RunGenesis] {
@@ -82,7 +85,8 @@ object method {
         snapshot.opts,
         genesisPathOpts,
         seedlistPathOpts,
-        CollateralAmountOpts.opts
+        CollateralAmountOpts.opts,
+        L0PeerOpts.opts
       ).mapN(RunGenesis.apply)
     }
   }
@@ -95,7 +99,8 @@ object method {
     environment: AppEnvironment,
     snapshotConfig: SnapshotConfig,
     seedlistPath: Option[Path],
-    collateralAmount: Option[Amount]
+    collateralAmount: Option[Amount],
+    l0Peer: L0Peer
   ) extends Run
 
   object RunValidator extends WithOpts[RunValidator] {
@@ -111,7 +116,8 @@ object method {
         AppEnvironment.opts,
         snapshot.opts,
         seedlistPathOpts,
-        CollateralAmountOpts.opts
+        CollateralAmountOpts.opts,
+        L0PeerOpts.opts
       ).mapN(RunValidator.apply)
     }
   }

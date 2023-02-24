@@ -1,17 +1,20 @@
 package org.tessellation.currency.modules
 
 import cats.effect.Async
+import cats.effect.std.Random
 
-import org.tessellation.sdk.domain.cluster.programs.{Joining, PeerDiscovery}
+import org.tessellation.currency.http.P2PClient
+import org.tessellation.sdk.domain.cluster.programs.{Joining, L0PeerDiscovery, PeerDiscovery}
 import org.tessellation.sdk.infrastructure.snapshot.programs.Download
 import org.tessellation.sdk.modules.SdkPrograms
 
 object Programs {
 
-  def make[F[_]: Async](
+  def make[F[_]: Async: Random](
     sdkPrograms: SdkPrograms[F],
     storages: Storages[F],
-    services: Services[F]
+    services: Services[F],
+    p2pClient: P2PClient[F]
   ): Programs[F] = {
     val download = Download
       .make(
@@ -19,12 +22,18 @@ object Programs {
         services.consensus
       )
 
-    new Programs[F](sdkPrograms.peerDiscovery, sdkPrograms.joining, download) {}
+    val globalL0PeerDiscovery = L0PeerDiscovery.make(
+      p2pClient.globalL0Cluster,
+      storages.globalL0Cluster
+    )
+
+    new Programs[F](sdkPrograms.peerDiscovery, globalL0PeerDiscovery, sdkPrograms.joining, download) {}
   }
 }
 
 sealed abstract class Programs[F[_]] private (
   val peerDiscovery: PeerDiscovery[F],
+  val globalL0PeerDiscovery: L0PeerDiscovery[F],
   val joining: Joining[F],
   val download: Download[F]
 )

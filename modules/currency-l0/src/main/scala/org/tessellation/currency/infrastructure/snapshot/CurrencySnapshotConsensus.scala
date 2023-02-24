@@ -14,10 +14,11 @@ import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types.SnapshotConfig
 import org.tessellation.sdk.domain.block.processing.BlockValidator
 import org.tessellation.sdk.domain.cluster.services.Session
-import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
+import org.tessellation.sdk.domain.cluster.storage.{ClusterStorage, L0ClusterStorage}
 import org.tessellation.sdk.domain.gossip.Gossip
 import org.tessellation.sdk.domain.node.NodeStorage
 import org.tessellation.sdk.domain.snapshot.storage.SnapshotStorage
+import org.tessellation.sdk.http.p2p.clients.StateChannelSnapshotClient
 import org.tessellation.sdk.infrastructure.block.processing.BlockAcceptanceManager
 import org.tessellation.sdk.infrastructure.consensus.Consensus
 import org.tessellation.sdk.infrastructure.metrics.Metrics
@@ -41,14 +42,18 @@ object CurrencySnapshotConsensus {
     snapshotConfig: SnapshotConfig,
     environment: AppEnvironment,
     client: Client[F],
-    session: Session[F]
+    session: Session[F],
+    l0ClusterStorage: L0ClusterStorage[F],
+    stateChannelSnapshotClient: StateChannelSnapshotClient[F]
   ): F[SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, CurrencySnapshotEvent]] =
     Consensus.make[F, CurrencySnapshotEvent, SnapshotOrdinal, CurrencySnapshotArtifact](
       CurrencySnapshotConsensusFunctions.make[F](
+        keyPair,
         snapshotStorage,
         BlockAcceptanceManager.make[F, CurrencyTransaction, CurrencyBlock](blockValidator),
         collateral,
-        environment
+        l0ClusterStorage,
+        stateChannelSnapshotClient
       ),
       gossip,
       selfId,

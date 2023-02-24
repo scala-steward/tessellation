@@ -1,4 +1,4 @@
-package org.tessellation.currency
+package org.tessellation.currency.l0
 
 import cats.effect.{IO, Resource}
 import cats.syntax.applicative._
@@ -10,6 +10,7 @@ import org.tessellation.currency.cli.method.{Run, RunGenesis, RunValidator}
 import org.tessellation.currency.http.P2PClient
 import org.tessellation.currency.modules._
 import org.tessellation.currency.schema.currency.{CurrencySnapshot, TokenSymbol}
+import org.tessellation.currency.{BuildInfo, CurrencyKryoRegistrationIdRange, currencyKryoRegistrar}
 import org.tessellation.ext.cats.effect.ResourceIO
 import org.tessellation.ext.kryo._
 import org.tessellation.schema.address.Address
@@ -26,17 +27,18 @@ import org.tessellation.sdk.{SdkOrSharedOrKernelRegistrationIdRange, sdkKryoRegi
 import org.tessellation.security.signature.Signed
 
 import com.monovore.decline.Opts
-import eu.timepit.refined.auto._
 import eu.timepit.refined.boolean.Or
 
 abstract class CurrencyApp[A <: CliMethod](
-  header: String,
-  clusterId: ClusterId,
-  helpFlag: Boolean,
-  version: String,
   symbol: TokenSymbol,
+  clusterId: ClusterId,
   identifier: Address
-) extends TessellationIOApp[A](clusterId.toString, header, clusterId, helpFlag, version) {
+) extends TessellationIOApp[A](
+      s"$symbol-currency-l0",
+      s"$symbol L0 node",
+      clusterId,
+      version = BuildInfo.version
+    ) {
   type KryoRegistrationIdRange = CurrencyKryoRegistrationIdRange Or SdkOrSharedOrKernelRegistrationIdRange
 
   val kryoRegistrar: Map[Class[_], KryoRegistrationId[KryoRegistrationIdRange]] =
@@ -45,14 +47,11 @@ abstract class CurrencyApp[A <: CliMethod](
   def run(method: A, sdk: SDK[IO]): Resource[IO, Unit]
 }
 
-abstract class CurrencyL0App(
-  header: String,
-  clusterId: ClusterId,
-  helpFlag: Boolean,
-  version: String,
+abstract class L0CurrencyIOApp(
   symbol: TokenSymbol,
+  clusterId: ClusterId,
   identifier: Address
-) extends CurrencyApp[Run](header, clusterId, helpFlag, version, symbol, identifier) {
+) extends CurrencyApp[Run](symbol, clusterId, identifier) {
 
   val opts: Opts[Run] = method.opts
   def run(method: Run, sdk: SDK[IO]): Resource[IO, Unit] = {
@@ -62,14 +61,13 @@ abstract class CurrencyL0App(
 
     for {
       _ <- Resource.unit
-      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client, sdkServices.session)
+      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client, keyPair, identifier)
       queues <- Queues.make[IO](sdkQueues).asResource
-      storages <- Storages.make[IO](sdkStorages, cfg.snapshot).asResource
+      storages <- Storages.make[IO](sdkStorages, cfg.snapshot, method.l0Peer).asResource
       validators = Validators.make[IO](seedlist)
       services <- Services
         .make[IO](
           sdkServices,
-          queues,
           storages,
           validators,
           sdkResources.client,
@@ -77,10 +75,11 @@ abstract class CurrencyL0App(
           sdk.seedlist,
           sdk.nodeId,
           keyPair,
-          cfg
+          cfg,
+          identifier
         )
         .asResource
-      programs = Programs.make[IO](sdkPrograms, storages, services)
+      programs = Programs.make[IO](sdkPrograms, storages, services, p2pClient)
       healthChecks <- HealthChecks
         .make[IO](
           storages,
@@ -132,6 +131,7 @@ abstract class CurrencyL0App(
       _ <- (method match {
         case _: RunValidator =>
           gossipDaemon.startAsRegularValidator >>
+            programs.globalL0PeerDiscovery.discoverFrom(cfg.l0Peer) >>
             storages.node.tryModifyState(NodeState.Initial, NodeState.ReadyToJoin)
         case m: RunGenesis =>
           storages.node.tryModifyState(
@@ -156,6 +156,7 @@ abstract class CurrencyL0App(
             gossipDaemon.startAsInitialValidator >>
             services.cluster.createSession >>
             services.session.createSession >>
+            programs.globalL0PeerDiscovery.discoverFrom(cfg.l0Peer) >>
             storages.node.setNodeState(NodeState.Ready)
       }).asResource
     } yield ()

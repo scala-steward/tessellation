@@ -1,5 +1,6 @@
 package org.tessellation.currency.config
 
+import org.tessellation.schema.peer.L0Peer
 import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types._
 
@@ -10,6 +11,7 @@ object types {
     gossip: GossipConfig,
     healthCheck: HealthCheckConfig,
     snapshot: SnapshotConfig,
-    collateral: CollateralConfig
+    collateral: CollateralConfig,
+    l0Peer: L0Peer
   )
 }

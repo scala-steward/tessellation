@@ -4,18 +4,22 @@ import java.security.KeyPair
 
 import cats.effect.kernel.Async
 import cats.effect.std.{Random, Supervisor}
+import cats.syntax.applicative._
+import cats.syntax.flatMap._
 import cats.syntax.functor._
 
 import org.tessellation.currency.config.types.AppConfig
 import org.tessellation.currency.infrastructure.snapshot.{CurrencySnapshotConsensus, CurrencySnapshotEvent}
 import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencySnapshot, CurrencyTransaction}
 import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.address.Address
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.domain.cluster.services.{Cluster, Session}
 import org.tessellation.sdk.domain.collateral.Collateral
 import org.tessellation.sdk.domain.gossip.Gossip
 import org.tessellation.sdk.domain.healthcheck.LocalHealthcheck
 import org.tessellation.sdk.domain.snapshot.services.AddressService
+import org.tessellation.sdk.http.p2p.clients.StateChannelSnapshotClient
 import org.tessellation.sdk.infrastructure.Collateral
 import org.tessellation.sdk.infrastructure.metrics.Metrics
 import org.tessellation.sdk.infrastructure.snapshot.SnapshotConsensus
@@ -29,7 +33,6 @@ object Services {
 
   def make[F[_]: Async: Random: KryoSerializer: SecurityProvider: Metrics: Supervisor](
     sdkServices: SdkServices[F],
-    queues: Queues[F],
     storages: Storages[F],
     validators: Validators[F],
     client: Client[F],
@@ -37,9 +40,11 @@ object Services {
     seedlist: Option[Set[PeerId]],
     selfId: PeerId,
     keyPair: KeyPair,
-    cfg: AppConfig
+    cfg: AppConfig,
+    identifier: Address
   ): F[Services[F]] =
     for {
+      stateChannelSnapshotClient <- StateChannelSnapshotClient.make(client, identifier).pure[F]
       consensus <- CurrencySnapshotConsensus
         .make[F](
           sdkServices.gossip,
@@ -54,7 +59,9 @@ object Services {
           cfg.snapshot,
           cfg.environment,
           client,
-          session
+          session,
+          storages.globalL0Cluster,
+          stateChannelSnapshotClient
         )
       addressService = AddressService.make[F, CurrencySnapshot](storages.snapshot)
       collateralService = Collateral.make[F](cfg.collateral, storages.snapshot)
