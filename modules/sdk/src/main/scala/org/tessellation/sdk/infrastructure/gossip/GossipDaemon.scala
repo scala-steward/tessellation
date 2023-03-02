@@ -144,10 +144,10 @@ object GossipDaemon {
 
       private def handleRumor(hashedRumor: Hashed[RumorRaw]): F[Unit] =
         rumorHandler
-          .run((hashedRumor.signed.value, selfId))
+          .run((hashedRumor.signed.value, selfId)) // A => F[B] // ConsensusEvent[S[C]] => OptionT[F, ConsensusEvent[S[C]]]
           .semiflatTap(_ => metrics.updateRumorsConsumed("success", hashedRumor))
           .getOrElseF {
-            logger.debug(s"Unhandled rumor {hash=${hashedRumor.hash.show}}") >>
+            logger.debug(s"Unhandled rumor {hash=${hashedRumor.hash.show}}, ${hashedRumor.signed.value.contentType}") >>
               metrics.updateRumorsConsumed("unhandled", hashedRumor)
           }
           .handleErrorWith { err =>

@@ -11,6 +11,7 @@ import cats.syntax.option._
 import cats.syntax.order._
 import cats.syntax.traverse._
 
+import scala.Console.{MAGENTA, RESET}
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import org.tessellation.domain.rewards.Rewards
@@ -105,6 +106,7 @@ object GlobalSnapshotConsensusFunctions {
         (scSnapshots, returnedSCEvents) <- stateChannelEventsProcessor.process(lastArtifact.info, scEvents)
         sCSnapshotHashes <- scSnapshots.toList.traverse { case (address, nel) => nel.head.hashF.map(address -> _) }
           .map(_.toMap)
+        _ <- logger.info(s"${MAGENTA}sCSnapshotHashes: ${sCSnapshotHashes}${RESET}")
         updatedLastStateChannelSnapshotHashes = lastArtifact.info.lastStateChannelSnapshotHashes ++ sCSnapshotHashes
 
         lastActiveTips <- lastArtifact.activeTips

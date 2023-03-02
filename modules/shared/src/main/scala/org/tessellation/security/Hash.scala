@@ -16,6 +16,10 @@ object hash {
 
   @derive(encoder, decoder, ordering, order, show)
   @newtype
+  case class BinaryHash(value: String)
+
+  @derive(encoder, decoder, ordering, order, show)
+  @newtype
   case class Hash(value: String)
 
   object Hash {

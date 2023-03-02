@@ -10,6 +10,9 @@ import cats.syntax.option._
 import cats.syntax.order._
 import cats.syntax.show._
 
+import scala.Console.{RESET, YELLOW}
+
+import org.tessellation.currency.modules.LastSignedBinaryHashStorage
 import org.tessellation.currency.schema.currency._
 import org.tessellation.ext.cats.syntax.next._
 import org.tessellation.ext.crypto._
@@ -34,7 +37,7 @@ abstract class CurrencySnapshotConsensusFunctions[F[_]: Async: SecurityProvider]
       F,
       CurrencyTransaction,
       CurrencyBlock,
-      CurrencySnapshotEvent,
+      Signed[CurrencyBlock],
       CurrencySnapshotArtifact,
       ConsensusTrigger
     ] {}
@@ -42,15 +45,18 @@ abstract class CurrencySnapshotConsensusFunctions[F[_]: Async: SecurityProvider]
 object CurrencySnapshotConsensusFunctions {
 
   def make[F[_]: Async: KryoSerializer: SecurityProvider](
+    lastSignedBinaryHashStorage: LastSignedBinaryHashStorage[F],
     keyPair: KeyPair,
     snapshotStorage: SnapshotStorage[F, CurrencySnapshot],
     blockAcceptanceManager: BlockAcceptanceManager[F, CurrencyTransaction, CurrencyBlock],
     collateral: Amount,
     l0ClusterStorage: L0ClusterStorage[F],
     stateChannelSnapshotClient: StateChannelSnapshotClient[F]
-  ): CurrencySnapshotConsensusFunctions[F] = new CurrencySnapshotConsensusFunctions[F] {
+  )(implicit ordering: Ordering[CurrencyTransaction]): CurrencySnapshotConsensusFunctions[F] = new CurrencySnapshotConsensusFunctions[F] {
 
     private val logger = Slf4jLogger.getLoggerFromClass(CurrencySnapshotConsensusFunctions.getClass)
+
+    def log(str: String): F[Unit] = logger.info(s"${YELLOW}${str}${RESET}")
 
     def getRequiredCollateral: Amount = collateral
 
@@ -66,7 +72,12 @@ object CurrencySnapshotConsensusFunctions {
         l0Peer <- l0ClusterStorage.getRandomPeer
         artifactHash <- signedArtifact.hashF
         artifactBytes <- signedArtifact.toBinaryF
-        artifactBinary <- StateChannelSnapshotBinary(artifactHash, artifactBytes).sign(keyPair)
+        lastSnapshotBinaryHash <- lastSignedBinaryHashStorage.get
+        _ <- log(s"Last Binary hash: ${lastSnapshotBinaryHash}")
+        artifactBinary <- StateChannelSnapshotBinary(lastSnapshotBinaryHash, artifactBytes).sign(keyPair)
+        artifactBinaryHash <- artifactBinary.hashF
+        _ <- log(s"Binary hash: ${artifactBinaryHash}")
+        _ <- lastSignedBinaryHashStorage.set(artifactBinaryHash)
         _ <- stateChannelSnapshotClient
           .sendStateChannelSnapshot(artifactBinary)(l0Peer)
           .ifM(
@@ -139,7 +150,7 @@ object CurrencySnapshotConsensusFunctions {
 
     private def getReturnedEvents(
       acceptanceResult: BlockAcceptanceResult[CurrencyBlock]
-    ): Set[CurrencySnapshotEvent] =
+    ): Set[Signed[CurrencyBlock]] =
       acceptanceResult.notAccepted.mapFilter {
         case (signedBlock, _: BlockAwaitReason) => signedBlock.some
         case _                                  => none

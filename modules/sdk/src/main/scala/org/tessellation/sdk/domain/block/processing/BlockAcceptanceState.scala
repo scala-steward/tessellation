@@ -28,7 +28,9 @@ case class BlockAcceptanceState[T <: Transaction, B <: Block[T]](
 
 object BlockAcceptanceState {
 
-  def withRejectedBlocks[T <: Transaction, B <: Block[T]](rejected: List[(Signed[B], BlockRejectionReason)]): BlockAcceptanceState[T, B] =
+  def withRejectedBlocks[T <: Transaction, B <: Block[T]](
+    rejected: List[(Signed[B], BlockRejectionReason)]
+  ): BlockAcceptanceState[T, B] =
     BlockAcceptanceState(
       contextUpdate = BlockAcceptanceContextUpdate.empty,
       accepted = List.empty,

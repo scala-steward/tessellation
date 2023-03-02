@@ -3,12 +3,11 @@ package org.tessellation.schema
 import java.security.PublicKey
 import java.util.UUID
 
-import cats.Show
 import cats.effect.kernel.Async
-import cats.kernel.Order
 import cats.syntax.contravariant._
 import cats.syntax.eq._
 import cats.syntax.functor._
+import cats.{Order, Show}
 
 import org.tessellation.ext.derevo.ordering
 import org.tessellation.schema.ID.Id

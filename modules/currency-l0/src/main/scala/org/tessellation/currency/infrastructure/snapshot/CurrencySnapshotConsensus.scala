@@ -5,6 +5,7 @@ import java.security.KeyPair
 import cats.effect.kernel.Async
 import cats.effect.std.{Random, Supervisor}
 
+import org.tessellation.currency.modules.LastSignedBinaryHashStorage
 import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencySnapshot, CurrencyTransaction}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.SnapshotOrdinal
@@ -24,6 +25,7 @@ import org.tessellation.sdk.infrastructure.consensus.Consensus
 import org.tessellation.sdk.infrastructure.metrics.Metrics
 import org.tessellation.sdk.infrastructure.snapshot.SnapshotConsensus
 import org.tessellation.security.SecurityProvider
+import org.tessellation.security.signature.Signed
 
 import org.http4s.client.Client
 
@@ -44,10 +46,14 @@ object CurrencySnapshotConsensus {
     client: Client[F],
     session: Session[F],
     l0ClusterStorage: L0ClusterStorage[F],
-    stateChannelSnapshotClient: StateChannelSnapshotClient[F]
-  ): F[SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, CurrencySnapshotEvent]] =
-    Consensus.make[F, CurrencySnapshotEvent, SnapshotOrdinal, CurrencySnapshotArtifact](
+    stateChannelSnapshotClient: StateChannelSnapshotClient[F],
+    lastSignedBinaryHashStorage: LastSignedBinaryHashStorage[F]
+  )(
+    implicit ordering: Ordering[CurrencyTransaction]
+  ): F[SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, Signed[CurrencyBlock]]] =
+    Consensus.make[F, Signed[CurrencyBlock], SnapshotOrdinal, CurrencySnapshotArtifact](
       CurrencySnapshotConsensusFunctions.make[F](
+        lastSignedBinaryHashStorage,
         keyPair,
         snapshotStorage,
         BlockAcceptanceManager.make[F, CurrencyTransaction, CurrencyBlock](blockValidator),

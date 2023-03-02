@@ -18,7 +18,7 @@ object snapshot {
   val opts: Opts[SnapshotConfig] = snapshotPath.map { snapshotPath =>
     SnapshotConfig(
       consensus = ConsensusConfig(
-        timeTriggerInterval = 43.seconds,
+        timeTriggerInterval = 1000.seconds,
         declarationTimeout = 50.seconds,
         declarationRangeLimit = 3L,
         lockDuration = 10.seconds,

@@ -17,5 +17,6 @@ case class StateChannelSnapshotBinary(
 )
 
 object StateChannelSnapshotBinary {
+
   implicit val show: Show[StateChannelSnapshotBinary] = s => s"StateChannelSnapshotBinary(lastSnapshotHash=${s.lastSnapshotHash.show})"
 }

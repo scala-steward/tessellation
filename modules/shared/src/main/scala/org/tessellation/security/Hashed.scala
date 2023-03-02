@@ -1,9 +1,8 @@
 package org.tessellation.security
 
-import cats.Show
-import cats.kernel.Order
 import cats.syntax.contravariant._
 import cats.syntax.show._
+import cats.{Order, Show}
 
 import org.tessellation.security.hash.{Hash, ProofsHash}
 import org.tessellation.security.signature.Signed

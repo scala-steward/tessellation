@@ -5,7 +5,6 @@ import cats.data.{NonEmptyList, NonEmptySet}
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import org.tessellation.ext.cats.data.OrderBasedOrdering
-import org.tessellation.ext.derevo.ordering
 import org.tessellation.schema._
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.Balance
@@ -30,7 +29,7 @@ object currency {
   @newtype
   case class TokenSymbol(symbol: String Refined MatchesRegex["[A-Z]+"])
 
-  @derive(decoder, encoder, order, ordering, show)
+  @derive(decoder, encoder, order, show)
   case class CurrencyTransaction(
     source: Address,
     destination: Address,
@@ -40,13 +39,18 @@ object currency {
     salt: TransactionSalt
   ) extends Transaction
 
-  @derive(show, eqv, encoder, decoder, order, ordering)
+  object CurrencyTransaction {
+    implicit object OrderingInstance extends OrderBasedOrdering[CurrencyTransaction]
+  }
+
+  @derive(show, eqv, encoder, decoder, order)
   case class CurrencyBlock(
     parent: NonEmptyList[BlockReference],
     transactions: NonEmptySet[Signed[CurrencyTransaction]]
   ) extends Block[CurrencyTransaction]
 
   object CurrencyBlock {
+    implicit object OrderingInstance extends OrderBasedOrdering[CurrencyBlock]
     implicit object OrderingInstanceAsActiveTip extends OrderBasedOrdering[BlockAsActiveTip[CurrencyBlock]]
   }
 
@@ -73,7 +77,7 @@ object currency {
         SnapshotOrdinal.MinValue,
         Height.MinValue,
         SubHeight.MinValue,
-        Hash(""),
+        Hash.empty,
         SortedSet.empty,
         SnapshotTips(SortedSet.empty, mkActiveTips(8)),
         CurrencySnapshotInfo(SortedMap.empty, SortedMap.from(balances))

@@ -75,9 +75,11 @@ object BlockAcceptanceManager {
                       .merge
                 }
             }
-            result <-
+            result <- {
+              val f = implicitly[Eq[BlockAcceptanceState[T, B]]]
               if (initState === currState) currState.pure[F]
               else go(currState, currState.awaiting.map(_._1))
+            }
           } yield result
 
         blocks.sorted

@@ -90,7 +90,8 @@ abstract class TessellationIOApp[A <: CliMethod](
                       Supervisor[IO].flatMap { implicit _supervisor =>
                         for {
                           _ <- IO(System.setProperty("self_id", selfId.show)).asResource
-                          _ <- logger.info(s"Self peerId: ${selfId}").asResource
+                          address <- selfId.toAddress[IO].asResource
+                          _ <- logger.info(s"Self peerId: ${selfId}, address: $address").asResource
                           _generation <- Generation.make[IO].asResource
                           versionHash <- version.hash.liftTo[IO].asResource
                           _seedlist <- method.seedlistPath

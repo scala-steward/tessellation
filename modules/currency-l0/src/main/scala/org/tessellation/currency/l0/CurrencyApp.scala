@@ -1,9 +1,15 @@
 package org.tessellation.currency.l0
 
-import cats.effect.{IO, Resource}
+import java.security.KeyPair
+
+import cats.effect.{Async, IO, Resource}
 import cats.syntax.applicative._
 import cats.syntax.applicativeError._
+import cats.syntax.flatMap._
+import cats.syntax.functor._
 import cats.syntax.semigroupk._
+
+import scala.Console.{RESET, YELLOW}
 
 import org.tessellation.currency.cli.method
 import org.tessellation.currency.cli.method.{Run, RunGenesis, RunValidator}
@@ -12,7 +18,9 @@ import org.tessellation.currency.modules._
 import org.tessellation.currency.schema.currency.{CurrencySnapshot, TokenSymbol}
 import org.tessellation.currency.{BuildInfo, CurrencyKryoRegistrationIdRange, currencyKryoRegistrar}
 import org.tessellation.ext.cats.effect.ResourceIO
+import org.tessellation.ext.crypto._
 import org.tessellation.ext.kryo._
+import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.cluster.ClusterId
 import org.tessellation.schema.node.NodeState
@@ -24,10 +32,13 @@ import org.tessellation.sdk.infrastructure.gossip.{GossipDaemon, RumorHandlers}
 import org.tessellation.sdk.resources.MkHttpServer
 import org.tessellation.sdk.resources.MkHttpServer.ServerName
 import org.tessellation.sdk.{SdkOrSharedOrKernelRegistrationIdRange, sdkKryoRegistrar}
+import org.tessellation.security.SecurityProvider
 import org.tessellation.security.signature.Signed
+import org.tessellation.statechannel.StateChannelSnapshotBinary
 
 import com.monovore.decline.Opts
 import eu.timepit.refined.boolean.Or
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 abstract class CurrencyApp[A <: CliMethod](
   symbol: TokenSymbol,
@@ -54,6 +65,21 @@ abstract class L0CurrencyIOApp(
 ) extends CurrencyApp[Run](symbol, clusterId, identifier) {
 
   val opts: Opts[Run] = method.opts
+
+  private def genesisBinary[F[_]: Async: KryoSerializer: SecurityProvider](
+    keyPair: KeyPair,
+    genesis: Signed[CurrencySnapshot],
+    storage: LastSignedBinaryHashStorage[F]
+  ): F[Signed[StateChannelSnapshotBinary]] =
+    for {
+      artifactHash <- genesis.hashF
+      genesisBytes <- genesis.toBinaryF
+      genesisBinary <- StateChannelSnapshotBinary(genesis.lastSnapshotHash, genesisBytes).sign(keyPair)
+      binaryHash <- genesisBinary.hashF
+      _ <- Slf4jLogger.getLogger.info(s"${YELLOW}Genesis binary hash: ${binaryHash}${RESET}")
+      _ <- storage.set(binaryHash)
+    } yield genesisBinary
+
   def run(method: Run, sdk: SDK[IO]): Resource[IO, Unit] = {
     import sdk._
 
@@ -146,6 +172,14 @@ abstract class L0CurrencyIOApp(
 
               Signed.forAsyncKryo[IO, CurrencySnapshot](genesis, keyPair).flatMap { signedGenesis =>
                 storages.snapshot.prepend(signedGenesis) >>
+                  genesisBinary[IO](keyPair, signedGenesis, storages.lastSignedBinaryHash).flatMap { bin =>
+                    p2pClient.stateChannelSnapshotClient
+                      .sendStateChannelSnapshot(bin)(method.l0Peer)
+                      .ifM(
+                        logger.info("Genesis sent"),
+                        logger.error("Genesis not sent")
+                      )
+                  } >>
                   services.collateral
                     .hasCollateral(sdk.nodeId)
                     .flatMap(OwnCollateralNotSatisfied.raiseError[IO, Unit].unlessA) >>

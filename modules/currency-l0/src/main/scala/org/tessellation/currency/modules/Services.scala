@@ -9,7 +9,7 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 
 import org.tessellation.currency.config.types.AppConfig
-import org.tessellation.currency.infrastructure.snapshot.{CurrencySnapshotConsensus, CurrencySnapshotEvent}
+import org.tessellation.currency.infrastructure.snapshot.CurrencySnapshotConsensus
 import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencySnapshot, CurrencyTransaction}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
@@ -26,6 +26,7 @@ import org.tessellation.sdk.infrastructure.snapshot.SnapshotConsensus
 import org.tessellation.sdk.infrastructure.snapshot.services.AddressService
 import org.tessellation.sdk.modules.SdkServices
 import org.tessellation.security.SecurityProvider
+import org.tessellation.security.signature.Signed
 
 import org.http4s.client.Client
 
@@ -61,7 +62,8 @@ object Services {
           client,
           session,
           storages.globalL0Cluster,
-          stateChannelSnapshotClient
+          stateChannelSnapshotClient,
+          storages.lastSignedBinaryHash
         )
       addressService = AddressService.make[F, CurrencySnapshot](storages.snapshot)
       collateralService = Collateral.make[F](cfg.collateral, storages.snapshot)
@@ -82,7 +84,7 @@ sealed abstract class Services[F[_]] private (
   val cluster: Cluster[F],
   val session: Session[F],
   val gossip: Gossip[F],
-  val consensus: SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, CurrencySnapshotEvent],
+  val consensus: SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, Signed[CurrencyBlock]],
   val address: AddressService[F, CurrencySnapshot],
   val collateral: Collateral[F]
 )

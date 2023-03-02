@@ -33,7 +33,7 @@ object Services {
     sdkServices: SdkServices[F],
     p2PClient: P2PClient[F, T, B],
     cfg: AppConfig
-  ): Services[F, T, B] =
+  )(implicit ordering: Ordering[T]): Services[F, T, B] =
     new Services[F, T, B](
       localHealthcheck = sdkServices.localHealthcheck,
       block = BlockService.make[F, T, B](

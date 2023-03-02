@@ -6,10 +6,8 @@ import org.tessellation.security.signature.Signed
 
 package object snapshot {
 
-  type CurrencySnapshotEvent = Signed[CurrencyBlock]
-
   type CurrencySnapshotArtifact = CurrencySnapshot
 
-  type CurrencySnapshotConsensus[F[_]] = SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, CurrencySnapshotEvent]
+  type CurrencySnapshotConsensus[F[_]] = SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshot, Signed[CurrencyBlock]]
 
 }

@@ -10,6 +10,7 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.traverse._
 
+import scala.Console.{RESET, YELLOW}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.tessellation.schema.gossip._
@@ -52,6 +53,7 @@ object RumorHandler {
     val pf = new PartialFunction[(RumorRaw, PeerId), F[Unit]] {
       def isDefinedAt(v: (RumorRaw, PeerId)): Boolean = v match {
         case (rumor, selfId) =>
+          println(s"${YELLOW}${rumor.contentType} == ${handlerContentType}${RESET}")
           rumor.isInstanceOf[PeerRumorRaw] &&
           rumor.contentType === handlerContentType &&
           ((rumor.asInstanceOf[PeerRumorRaw].origin === selfId) ==> (selfOriginPolicy =!= ExcludeSelfOrigin))
