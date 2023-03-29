@@ -1,7 +1,5 @@
 on:
   push:
-    tags:
-      - 'v*'
 
 name: Create Release
 
@@ -13,8 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Check if project version is release version
-        run:  tr -d '\n' < ./version.sbt  | grep -E "^ThisBuild / version := \"[0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}\"\s*$"
+      #- name: Check if project version is release version
+        #run:  tr -d '\n' < ./version.sbt  | grep -E "^ThisBuild / version := \"[0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}\"\s*$"
 
       - name: Build Changelog
         id: build_changelog
