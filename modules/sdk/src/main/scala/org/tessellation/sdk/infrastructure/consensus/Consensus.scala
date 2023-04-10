@@ -19,6 +19,7 @@ import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
 import org.tessellation.sdk.domain.consensus.ConsensusFunctions
 import org.tessellation.sdk.domain.gossip.Gossip
 import org.tessellation.sdk.domain.node.NodeStorage
+import org.tessellation.sdk.http.p2p.clients.GlobalSnapshotClient
 import org.tessellation.sdk.infrastructure.gossip.RumorHandler
 import org.tessellation.sdk.infrastructure.metrics.Metrics
 import org.tessellation.security.SecurityProvider
@@ -74,7 +75,8 @@ object Consensus {
         nodeStorage,
         clusterStorage,
         consClient,
-        selfId
+        selfId,
+        GlobalSnapshotClient.make(client, session)
       )
       handler = ConsensusHandler.make[F, Event, Key, Artifact](storage, manager, consensusFns)
       routes = new ConsensusRoutes[F, Key, Artifact](storage)

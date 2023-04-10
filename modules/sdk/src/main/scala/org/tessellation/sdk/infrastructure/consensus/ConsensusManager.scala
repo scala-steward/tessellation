@@ -10,13 +10,16 @@ import cats.syntax.all._
 import scala.concurrent.duration._
 
 import org.tessellation.ext.cats.syntax.next._
+import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.node.NodeState._
 import org.tessellation.schema.peer.Peer.toP2PContext
 import org.tessellation.schema.peer.{Peer, PeerId}
+import org.tessellation.schema.{GlobalSnapshot, SnapshotOrdinal}
 import org.tessellation.sdk.config.types.ConsensusConfig
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
 import org.tessellation.sdk.domain.node.NodeStorage
+import org.tessellation.sdk.http.p2p.clients.GlobalSnapshotClient
 import org.tessellation.sdk.infrastructure.consensus.message.GetConsensusOutcomeRequest
 import org.tessellation.sdk.infrastructure.consensus.trigger.{ConsensusTrigger, EventTrigger, TimeTrigger}
 import org.tessellation.sdk.infrastructure.metrics.Metrics
@@ -41,7 +44,7 @@ trait ConsensusManager[F[_], Key, Artifact] {
 
 object ConsensusManager {
 
-  def make[F[_]: Async: Random: Metrics, Event, Key: Show: Order: Next, Artifact: Eq](
+  def make[F[_]: Async: Random: Metrics: KryoSerializer, Event, Key: Show: Order: Next, Artifact: Eq](
     config: ConsensusConfig,
     consensusStorage: ConsensusStorage[F, Event, Key, Artifact],
     consensusStateCreator: ConsensusStateCreator[F, Key, Artifact],
@@ -50,7 +53,8 @@ object ConsensusManager {
     nodeStorage: NodeStorage[F],
     clusterStorage: ClusterStorage[F],
     consensusClient: ConsensusClient[F, Key, Artifact],
-    selfId: PeerId
+    selfId: PeerId,
+    gsClient: GlobalSnapshotClient[F]
   )(implicit S: Supervisor[F]): F[ConsensusManager[F, Key, Artifact]] = {
     val logger = Slf4jLogger.getLoggerFromClass[F](ConsensusManager.getClass)
 
@@ -75,9 +79,13 @@ object ConsensusManager {
         S.supervise {
 
           def getObservedOutcome: F[ConsensusOutcome[Key, Artifact]] = for {
-            readyPeers <- clusterStorage.getResponsivePeers
-              .map(_.filter(_.state === Ready))
-            selectedPeer <- Random[F].elementOf(readyPeers)
+            readyPeers <- clusterStorage.getResponsivePeers.map(peers => peers.filter(_.state === Ready))
+
+            numberOfPeersToQuery <- Random[F].nextIntBounded(readyPeers.size / 4 + 1)
+            peersToQuery <- Random[F].shuffleList(readyPeers.toList).map(_.take(n = numberOfPeersToQuery))
+
+            selectedPeer <- selectPeer(peersToQuery)
+//            selectedPeer <- Random[F].elementOf(readyPeers)
             observedOutcome <- observePeer(selectedPeer)
           } yield observedOutcome
 
@@ -274,6 +282,27 @@ object ConsensusManager {
             }
         }.void
 
+      // TODO handle case where peers is empty
+      // TODO handle case where peerSnaps is empty
+      private def selectPeer(peers: List[Peer]): F[Peer] = {
+        case class PeerSnapshot(sgs: Signed[GlobalSnapshot], hash: Hash, peer: Peer)
+        val groupFn: PeerSnapshot => (SnapshotOrdinal, Hash) = v => (v.sgs.value.ordinal, v.hash)
+
+        for {
+          peerSnaps: List[PeerSnapshot] <- peers.traverse(peer =>
+            for {
+              signedSnapshot <- gsClient.getLatest(peer)
+              hash <- signedSnapshot.toHashed.map(_.hash)
+            } yield PeerSnapshot(signedSnapshot, hash, peer)
+          )
+
+          groupedPeerSnaps = peerSnaps.groupBy(groupFn)
+
+          maxOccurring = groupedPeerSnaps.maxBy(_._2.size)
+          randomPeer <- Random[F].elementOf(maxOccurring._2.map(_.peer))
+
+        } yield randomPeer
+      }
     }
 
     S.supervise(
@@ -302,5 +331,6 @@ object ConsensusManager {
           .compile
           .drain
       ).as(manager)
+
   }
 }
