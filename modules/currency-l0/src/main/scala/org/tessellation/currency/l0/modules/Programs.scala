@@ -19,7 +19,8 @@ object Programs {
     val download = Download
       .make(
         storages.node,
-        services.consensus
+        services.consensus,
+        () => storages.cluster.getPeers
       )
 
     val globalL0PeerDiscovery = L0PeerDiscovery.make(

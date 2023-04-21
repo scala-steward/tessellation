@@ -18,7 +18,8 @@ object Programs {
     val download = Download
       .make(
         storages.node,
-        services.consensus
+        services.consensus,
+        () => storages.cluster.getPeers
       )
 
     new Programs[F](sdkPrograms.peerDiscovery, sdkPrograms.joining, trustPush, download) {}
