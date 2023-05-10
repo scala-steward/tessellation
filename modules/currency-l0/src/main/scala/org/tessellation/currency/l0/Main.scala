@@ -44,9 +44,9 @@ object Main
 
     for {
       _ <- Resource.unit
-      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client, method.identifier)
       queues <- Queues.make[IO](sdkQueues).asResource
       storages <- Storages.make[IO](sdkStorages, cfg.snapshot, method.globalL0Peer).asResource
+      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client)
       validators = Validators.make[IO](seedlist)
       services <- Services
         .make[IO](
@@ -124,16 +124,18 @@ object Main
 
       _ <- (method match {
         case _: RunValidator =>
-          gossipDaemon.startAsRegularValidator >>
+          storages.identifierStorage.setInitial(method.identifier) >>
+            gossipDaemon.startAsRegularValidator >>
             programs.globalL0PeerDiscovery.discoverFrom(cfg.globalL0Peer) >>
             storages.node.tryModifyState(NodeState.Initial, NodeState.ReadyToJoin)
 
         case _: RunRollback =>
-          storages.node.tryModifyState(
-            NodeState.Initial,
-            NodeState.RollbackInProgress,
-            NodeState.RollbackDone
-          )(programs.rollback.rollback) >> gossipDaemon.startAsInitialValidator >>
+          storages.identifierStorage.setInitial(method.identifier) >>
+            storages.node.tryModifyState(
+              NodeState.Initial,
+              NodeState.RollbackInProgress,
+              NodeState.RollbackDone
+            )(programs.rollback.rollback) >> gossipDaemon.startAsInitialValidator >>
             services.cluster.createSession >>
             services.session.createSession >>
             programs.globalL0PeerDiscovery.discoverFrom(cfg.globalL0Peer) >>
@@ -144,7 +146,7 @@ object Main
             NodeState.Initial,
             NodeState.LoadingGenesis,
             NodeState.GenesisReady
-          )(programs.genesis.accept(m.genesisPath)) >> gossipDaemon.startAsInitialValidator >>
+          )(programs.genesis.accept(m.genesisPath, m.genesisCurrencySnapshotSalt)) >> gossipDaemon.startAsInitialValidator >>
             services.cluster.createSession >>
             services.session.createSession >>
             programs.globalL0PeerDiscovery.discoverFrom(cfg.globalL0Peer) >>

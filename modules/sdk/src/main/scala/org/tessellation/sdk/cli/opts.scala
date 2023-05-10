@@ -9,6 +9,8 @@ object opts {
 
   val genesisPathOpts: Opts[Path] = Opts.argument[Path]("genesis")
 
+  val genesisSnapshotSalt: Opts[Long] = Opts.argument[Long]("genesis-salt")
+
   val trustRatingsPathOpts: Opts[Option[Path]] =
     Opts.option[Path]("ratings", "The path to the CSV of peer ID ratings").orNone
 }

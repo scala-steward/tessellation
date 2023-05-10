@@ -28,7 +28,7 @@ object Validators {
     storages: Storages[F, T, B, P, S, SI],
     seedlist: Option[Set[PeerId]]
   ): Validators[F, T, B] = {
-    val signedValidator = SignedValidator.make[F]
+    val signedValidator = SignedValidator.make[F](seedlist)
     val transactionChainValidator = TransactionChainValidator.make[F, T]
     val transactionValidator = TransactionValidator.make[F, T](signedValidator)
     val blockValidator =
@@ -37,7 +37,7 @@ object Validators {
       transactionValidator,
       (address: Address) => storages.transaction.getLastAcceptedReference(address)
     )
-    val rumorValidator = RumorValidator.make[F](seedlist, signedValidator)
+    val rumorValidator = RumorValidator.make[F](signedValidator)
 
     new Validators[F, T, B](
       signedValidator,

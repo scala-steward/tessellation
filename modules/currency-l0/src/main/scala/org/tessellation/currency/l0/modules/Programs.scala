@@ -59,7 +59,8 @@ object Programs {
       globalL0Peer,
       nodeId,
       services.consensus.manager,
-      genesisLoader
+      genesisLoader,
+      storages.identifierStorage
     )
 
     val rollback = Rollback.make(

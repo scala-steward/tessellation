@@ -14,7 +14,7 @@ import org.tessellation.schema.balance.Amount
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.peer.L0Peer
 import org.tessellation.sdk.cli._
-import org.tessellation.sdk.cli.opts.{genesisPathOpts, trustRatingsPathOpts}
+import org.tessellation.sdk.cli.opts.{genesisPathOpts, genesisSnapshotSalt, trustRatingsPathOpts}
 import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types._
 
@@ -60,7 +60,7 @@ object method {
 
     val stateAfterJoining: NodeState = NodeState.WaitingForDownload
 
-    val stateChannelSeedlistConfig: StateChannelSeedlistConfig = StateChannelSeedlistConfig(None)
+    val stateChannelAllowanceLists: StateChannelAllowanceListsConfig = StateChannelAllowanceListsConfig(None)
   }
 
   case class RunGenesis(
@@ -71,6 +71,7 @@ object method {
     environment: AppEnvironment,
     snapshotConfig: SnapshotConfig,
     genesisPath: Path,
+    genesisCurrencySnapshotSalt: Long,
     seedlistPath: Option[SeedListPath],
     collateralAmount: Option[Amount],
     globalL0Peer: L0Peer,
@@ -89,6 +90,7 @@ object method {
         AppEnvironment.opts,
         snapshot.opts,
         genesisPathOpts,
+        genesisSnapshotSalt,
         SeedListPath.opts,
         CollateralAmountOpts.opts,
         GlobalL0PeerOpts.opts,

@@ -49,7 +49,7 @@ object RoundDataSuite extends ResourceSuite with Checkers with TransactionGenera
           dstKey <- KeyPairGenerator.makeKeyPair[IO].asResource
           srcAddress = srcKey.getPublic.toAddress
           dstAddress = dstKey.getPublic.toAddress
-          signedValidator = SignedValidator.make
+          signedValidator = SignedValidator.make(None)
           txValidator = TransactionValidator.make[F, DAGTransaction](signedValidator)
         } yield (kp, sp, srcKey, dstKey, srcAddress, dstAddress, txValidator)
       }

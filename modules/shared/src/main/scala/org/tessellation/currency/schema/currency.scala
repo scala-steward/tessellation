@@ -17,6 +17,7 @@ import org.tessellation.schema._
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.{Amount, Balance}
 import org.tessellation.schema.height.{Height, SubHeight}
+import org.tessellation.schema.salt.Salt
 import org.tessellation.schema.semver.SnapshotVersion
 import org.tessellation.schema.snapshot._
 import org.tessellation.schema.transaction._
@@ -114,6 +115,7 @@ object currency {
     rewards: SortedSet[RewardTransaction],
     tips: SnapshotTips,
     info: CurrencySnapshotInfo,
+    salt: Salt,
     data: Option[Array[Byte]] = None,
     version: SnapshotVersion = SnapshotVersion("0.0.1")
   ) extends FullSnapshot[CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencySnapshotInfo]
@@ -149,7 +151,7 @@ object currency {
   }
 
   object CurrencySnapshot {
-    def mkGenesis(balances: Map[Address, Balance]): CurrencySnapshot =
+    def mkGenesis(balances: Map[Address, Balance], salt: Salt): CurrencySnapshot =
       CurrencySnapshot(
         SnapshotOrdinal.MinValue,
         Height.MinValue,
@@ -158,7 +160,8 @@ object currency {
         SortedSet.empty,
         SortedSet.empty,
         SnapshotTips(SortedSet.empty, mkActiveTips(8)),
-        CurrencySnapshotInfo(SortedMap.empty, SortedMap.from(balances))
+        CurrencySnapshotInfo(SortedMap.empty, SortedMap.from(balances)),
+        salt
       )
 
     def mkFirstIncrementalSnapshot[F[_]: MonadThrow: KryoSerializer](genesis: Hashed[CurrencySnapshot]): F[CurrencyIncrementalSnapshot] =

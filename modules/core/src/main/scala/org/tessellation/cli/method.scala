@@ -15,8 +15,8 @@ import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.balance.Amount
 import org.tessellation.schema.epoch.EpochProgress
 import org.tessellation.schema.node.NodeState
-import org.tessellation.sdk.cli._
 import org.tessellation.sdk.cli.opts.{genesisPathOpts, trustRatingsPathOpts}
+import org.tessellation.sdk.cli.{StateChannelAllowanceLists, _}
 import org.tessellation.sdk.config.AppEnvironment
 import org.tessellation.sdk.config.types._
 import org.tessellation.security.hash.Hash
@@ -65,13 +65,14 @@ object method {
       healthCheck = healthCheckConfig(false),
       snapshot = snapshotConfig,
       collateral = collateralConfig(environment, collateralAmount),
-      rewards = RewardsConfig()
+      rewards = RewardsConfig(),
+      stateChannelOrdinalDelay = 10L,
+      stateChannelAllowanceLists = StateChannelAllowanceListsConfig(allowed = StateChannelAllowanceLists.get(environment))
     )
 
     val stateAfterJoining: NodeState = NodeState.WaitingForDownload
 
-    val stateChannelSeedlistConfig: StateChannelSeedlistConfig =
-      StateChannelSeedlistConfig(seedlist = StateChannelSeedlist.get(environment))
+    val stateChannelAllowanceLists: StateChannelAllowanceListsConfig = appConfig.stateChannelAllowanceLists
 
     val lastFullGlobalSnapshotOrdinal: SnapshotOrdinal
 

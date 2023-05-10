@@ -17,12 +17,12 @@ object Validators {
   def make[F[_]: Async: KryoSerializer: SecurityProvider](
     seedlist: Option[Set[PeerId]]
   ): Validators[F] = {
-    val signedValidator = SignedValidator.make[F]
+    val signedValidator = SignedValidator.make[F](seedlist)
     val transactionChainValidator = TransactionChainValidator.make[F, CurrencyTransaction]
     val transactionValidator = TransactionValidator.make[F, CurrencyTransaction](signedValidator)
     val blockValidator =
       BlockValidator.make[F, CurrencyTransaction, CurrencyBlock](signedValidator, transactionChainValidator, transactionValidator)
-    val rumorValidator = RumorValidator.make[F](seedlist, signedValidator)
+    val rumorValidator = RumorValidator.make[F](signedValidator)
 
     new Validators[F](
       signedValidator,

@@ -72,7 +72,7 @@ object Main
         cfg,
         method.lastFullGlobalSnapshotOrdinal,
         p2pClient,
-        services.snapshotContextFunctions
+        sdkServices.globalSnapshotContextFns
       )
       healthChecks <- HealthChecks
         .make[IO](

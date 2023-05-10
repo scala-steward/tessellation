@@ -1,10 +1,13 @@
 package org.tessellation.sdk.config
 
+import cats.data.NonEmptySet
+
 import scala.concurrent.duration.FiniteDuration
 
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.Amount
 import org.tessellation.schema.node.NodeState
+import org.tessellation.schema.peer.PeerId
 
 import com.comcast.ip4s.{Host, Port}
 import eu.timepit.refined.types.numeric.{NonNegLong, PosInt, PosLong}
@@ -19,7 +22,7 @@ object types {
     leavingDelay: FiniteDuration,
     stateAfterJoining: NodeState,
     collateral: CollateralConfig,
-    stateChannelSeedlist: StateChannelSeedlistConfig
+    stateChannelAllowanceLists: StateChannelAllowanceListsConfig
   )
 
   case class RumorStorageConfig(
@@ -96,7 +99,7 @@ object types {
     amount: Amount
   )
 
-  case class StateChannelSeedlistConfig(
-    seedlist: Option[Set[Address]]
+  case class StateChannelAllowanceListsConfig(
+    allowed: Option[Map[Address, NonEmptySet[PeerId]]]
   )
 }

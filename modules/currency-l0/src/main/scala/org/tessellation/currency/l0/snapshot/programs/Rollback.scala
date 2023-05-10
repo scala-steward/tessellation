@@ -10,7 +10,7 @@ import cats.syntax.show._
 
 import scala.util.control.NoStackTrace
 
-import org.tessellation.currency.l0.snapshot.storages.LastSignedBinaryHashStorage
+import org.tessellation.currency.l0.snapshot.storages.LastBinaryHashStorage
 import org.tessellation.currency.l0.snapshot.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import org.tessellation.schema.SnapshotOrdinal
@@ -37,7 +37,7 @@ object Rollback {
     nodeId: PeerId,
     identifier: Address,
     globalL0Service: GlobalL0Service[F],
-    lastSignedBinaryHashStorage: LastSignedBinaryHashStorage[F],
+    lastSignedBinaryHashStorage: LastBinaryHashStorage[F],
     snapshotStorage: SnapshotStorage[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo],
     collateral: Collateral[F],
     consensusManager: ConsensusManager[F, SnapshotOrdinal, CurrencySnapshotArtifact, CurrencySnapshotContext]

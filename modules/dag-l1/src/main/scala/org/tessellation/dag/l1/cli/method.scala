@@ -58,7 +58,7 @@ object method {
       collateral = collateralConfig(environment, collateralAmount)
     )
 
-    val stateChannelSeedlistConfig: StateChannelSeedlistConfig = StateChannelSeedlistConfig(None)
+    val stateChannelAllowanceLists: StateChannelAllowanceListsConfig = StateChannelAllowanceListsConfig(None)
   }
 
   case class RunInitialValidator(

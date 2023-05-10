@@ -25,18 +25,13 @@ import org.tessellation.sdk.domain.healthcheck.LocalHealthcheck
 import org.tessellation.sdk.domain.rewards.Rewards
 import org.tessellation.sdk.domain.snapshot.services.AddressService
 import org.tessellation.sdk.infrastructure.Collateral
-import org.tessellation.sdk.infrastructure.block.processing.BlockAcceptanceManager
 import org.tessellation.sdk.infrastructure.consensus.Consensus
 import org.tessellation.sdk.infrastructure.metrics.Metrics
 import org.tessellation.sdk.infrastructure.snapshot.services.AddressService
-import org.tessellation.sdk.infrastructure.snapshot.{
-  GlobalSnapshotAcceptanceManager,
-  GlobalSnapshotContextFunctions,
-  GlobalSnapshotStateChannelEventsProcessor
-}
 import org.tessellation.sdk.modules.{SdkServices, SdkValidators}
 import org.tessellation.security.SecurityProvider
 
+import eu.timepit.refined.auto._
 import org.http4s.client.Client
 
 object Services {
@@ -61,11 +56,7 @@ object Services {
           FacilitatorDistributor.make
         )
         .pure[F]
-      snapshotAcceptanceManager = GlobalSnapshotAcceptanceManager.make(
-        BlockAcceptanceManager.make[F, DAGTransaction, DAGBlock](validators.blockValidator),
-        GlobalSnapshotStateChannelEventsProcessor.make[F](validators.stateChannelValidator, sdkServices.currencySnapshotContextFns),
-        cfg.collateral.amount
-      )
+
       consensus <- GlobalSnapshotConsensus
         .make[F](
           sdkServices.gossip,
@@ -76,9 +67,12 @@ object Services {
           storages.cluster,
           storages.node,
           storages.globalSnapshot,
-          snapshotAcceptanceManager,
+          validators,
+          sdkServices,
           cfg.snapshot,
           cfg.environment,
+          cfg.stateChannelOrdinalDelay,
+          cfg.stateChannelAllowanceLists,
           client,
           session,
           rewards
@@ -87,7 +81,6 @@ object Services {
       collateralService = Collateral.make[F](cfg.collateral, storages.globalSnapshot)
       stateChannelService = StateChannelService
         .make[F](L0Cell.mkL0Cell(queues.l1Output, queues.stateChannelOutput), validators.stateChannelValidator)
-      snapshotContextFunctions = GlobalSnapshotContextFunctions.make(snapshotAcceptanceManager)
     } yield
       new Services[F](
         localHealthcheck = sdkServices.localHealthcheck,
@@ -98,8 +91,7 @@ object Services {
         address = addressService,
         collateral = collateralService,
         rewards = rewards,
-        stateChannel = stateChannelService,
-        snapshotContextFunctions = snapshotContextFunctions
+        stateChannel = stateChannelService
       ) {}
 }
 
@@ -112,6 +104,5 @@ sealed abstract class Services[F[_]] private (
   val address: AddressService[F, GlobalIncrementalSnapshot],
   val collateral: Collateral[F],
   val rewards: Rewards[F, DAGTransaction, DAGBlock, GlobalSnapshotStateProof, GlobalIncrementalSnapshot],
-  val stateChannel: StateChannelService[F],
-  val snapshotContextFunctions: GlobalSnapshotContextFunctions[F]
+  val stateChannel: StateChannelService[F]
 )
