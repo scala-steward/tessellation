@@ -16,11 +16,11 @@ import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 
 import org.tessellation.currency.l0.http.P2PClient
-import org.tessellation.currency.l0.snapshot.CurrencySnapshotContext
 import org.tessellation.currency.schema.currency._
 import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema._
+import org.tessellation.schema.currency.CurrencySnapshotContext
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.peer.Peer
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage

@@ -23,15 +23,14 @@ import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema._
 import org.tessellation.schema.balance.Amount
-import org.tessellation.sdk.domain.block.processing._
-import org.tessellation.sdk.domain.rewards.Rewards
+import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
+import org.tessellation.sdk.domain.consensus.ConsensusFunctions.InvalidArtifact
 import org.tessellation.sdk.infrastructure.consensus.trigger.ConsensusTrigger
 import org.tessellation.sdk.infrastructure.metrics.Metrics
-import org.tessellation.sdk.infrastructure.snapshot.{CurrencySnapshotAcceptanceManager, SnapshotConsensusFunctions}
+import org.tessellation.sdk.infrastructure.snapshot._
 import org.tessellation.security.SecurityProvider
 import org.tessellation.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 abstract class CurrencySnapshotConsensusFunctions[F[_]: Async: SecurityProvider]
@@ -50,9 +49,9 @@ object CurrencySnapshotConsensusFunctions {
 
   def make[F[_]: Async: KryoSerializer: SecurityProvider: Metrics](
     stateChannelSnapshotService: StateChannelSnapshotService[F],
-    currencySnapshotAcceptanceManager: CurrencySnapshotAcceptanceManager[F],
     collateral: Amount,
-    rewards: Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot],
+    currencySnapshotCreator: CurrencySnapshotCreator[F],
+    currencySnapshotValidator: CurrencySnapshotValidator[F],
     maybeDataApplicationService: Option[BaseDataApplicationL0Service[F]]
   ): CurrencySnapshotConsensusFunctions[F] = new CurrencySnapshotConsensusFunctions[F] {
 
@@ -63,121 +62,28 @@ object CurrencySnapshotConsensusFunctions {
     def consumeSignedMajorityArtifact(signedArtifact: Signed[CurrencyIncrementalSnapshot], context: CurrencySnapshotInfo): F[Unit] =
       stateChannelSnapshotService.consume(signedArtifact, context)
 
-    def createProposalArtifact(
+    override def validateArtifact(
+      lastSignedArtifact: Signed[CurrencySnapshotArtifact],
+      lastContext: CurrencySnapshotContext,
+      trigger: ConsensusTrigger,
+      artifact: CurrencySnapshotArtifact
+    ): F[Either[InvalidArtifact, (CurrencySnapshotArtifact, CurrencySnapshotContext)]] =
+      currencySnapshotValidator
+        .validateSignedSnapshot(lastSignedArtifact, lastContext, trigger, artifact)
+        .map(_.leftMap(_ => ArtifactMismatch).toEither)
+        .map(_.map {
+          case (signedArtifact, context) => (signedArtifact.value, context)
+        })
+
+    override def createProposalArtifact(
       lastKey: SnapshotOrdinal,
       lastArtifact: Signed[CurrencySnapshotArtifact],
       lastContext: CurrencySnapshotContext,
       trigger: ConsensusTrigger,
       events: Set[CurrencySnapshotEvent]
-    ): F[(CurrencySnapshotArtifact, CurrencySnapshotContext, Set[CurrencySnapshotEvent])] = {
-
-      val (blocks: List[Signed[CurrencyBlock]], dataBlocks: List[Signed[DataApplicationBlock]]) = events.collect {
-        case event @ Left(_)                                           => event
-        case event @ Right(_) if maybeDataApplicationService.isDefined => event
-      }.toList.partitionMap(identity)
-
-      val blocksForAcceptance = blocks
-        .filter(_.height > lastArtifact.height)
-        .toList
-
-      for {
-        lastArtifactHash <- lastArtifact.value.hashF
-        currentOrdinal = lastArtifact.ordinal.next
-        lastActiveTips <- lastArtifact.activeTips
-        lastDeprecatedTips = lastArtifact.tips.deprecated
-
-        maybeLastDataApplication = lastArtifact.data
-
-        maybeLastDataState <- (maybeLastDataApplication, maybeDataApplicationService).mapN {
-          case ((lastDataApplication, service)) =>
-            service
-              .deserializeState(lastDataApplication)
-              .flatTap {
-                case Left(err) => logger.warn(err)(s"Cannot deserialize custom state")
-                case Right(a)  => logger.info(s"Deserialized state: ${a}") >> Applicative[F].unit
-              }
-              .map(_.toOption)
-              .handleErrorWith(err =>
-                logger.error(err)(s"Unhandled exception during deserialization data application, fallback to empty state") >>
-                  none[DataState].pure[F]
-              )
-        }.flatSequence
-
-        maybeNewDataState <- (maybeDataApplicationService, maybeLastDataState).mapN {
-          case ((service, lastState)) =>
-            NonEmptyList
-              .fromList(dataBlocks.flatMap(_.updates))
-              .map { updates =>
-                service
-                  .validateData(lastState, updates)
-                  .map(_.isValid)
-                  .handleErrorWith(err =>
-                    logger.error(err)(s"Unhandled exception during validating data application, assumed as invalid") >> false.pure[F]
-                  )
-                  .ifM(
-                    service
-                      .combine(lastState, updates)
-                      .flatMap { state =>
-                        service.serializeState(state)
-                      }
-                      .map(_.some)
-                      .handleErrorWith(err =>
-                        logger.error(err)(
-                          s"Unhandled exception during combine and serialize data application, fallback to last data application"
-                        ) >> maybeLastDataApplication.pure[F]
-                      ),
-                    logger.warn("Data application is not valid") >> maybeLastDataApplication.pure[F]
-                  )
-              }
-              .getOrElse(maybeLastDataApplication.pure[F])
-        }.flatSequence
-
-        (acceptanceResult, acceptedRewardTxs, snapshotInfo, stateProof) <- currencySnapshotAcceptanceManager.accept(
-          blocksForAcceptance,
-          lastContext,
-          lastActiveTips,
-          lastDeprecatedTips,
-          rewards.distribute(lastArtifact, lastContext.balances, _, trigger)
-        )
-
-        (deprecated, remainedActive, accepted) = getUpdatedTips(
-          lastActiveTips,
-          lastDeprecatedTips,
-          acceptanceResult,
-          currentOrdinal
-        )
-
-        (height, subHeight) <- getHeightAndSubHeight(lastArtifact, deprecated, remainedActive, accepted)
-
-        returnedEvents = getReturnedEvents(acceptanceResult)
-
-        artifact = CurrencyIncrementalSnapshot(
-          currentOrdinal,
-          height,
-          subHeight,
-          lastArtifactHash,
-          accepted,
-          acceptedRewardTxs,
-          SnapshotTips(
-            deprecated = deprecated,
-            remainedActive = remainedActive
-          ),
-          stateProof,
-          maybeNewDataState
-        )
-        context = CurrencySnapshotInfo(
-          lastTxRefs = lastContext.lastTxRefs ++ acceptanceResult.contextUpdate.lastTxRefs,
-          balances = lastContext.balances ++ acceptanceResult.contextUpdate.balances
-        )
-      } yield (artifact, context, returnedEvents)
-    }
-
-    private def getReturnedEvents(
-      acceptanceResult: BlockAcceptanceResult[CurrencyBlock]
-    ): Set[CurrencySnapshotEvent] =
-      acceptanceResult.notAccepted.mapFilter {
-        case (signedBlock, _: BlockAwaitReason) => signedBlock.asLeft[Signed[DataApplicationBlock]].some
-        case _                                  => none
-      }.toSet
+    ): F[(CurrencySnapshotArtifact, CurrencySnapshotContext, Set[CurrencySnapshotEvent])] =
+      currencySnapshotCreator
+        .createProposalArtifact(lastKey, lastArtifact, lastContext, trigger, events)
+        .map(created => (created.artifact, created.context, created.awaitingBlocks))
   }
 }

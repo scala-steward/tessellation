@@ -11,6 +11,7 @@ import org.tessellation.currency.{BaseDataApplicationL0Service, DataUpdate}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.balance.Amount
+import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.config.types.SnapshotConfig
 import org.tessellation.sdk.domain.cluster.services.Session
@@ -20,8 +21,9 @@ import org.tessellation.sdk.domain.node.NodeStorage
 import org.tessellation.sdk.domain.rewards.Rewards
 import org.tessellation.sdk.infrastructure.consensus.Consensus
 import org.tessellation.sdk.infrastructure.metrics.Metrics
-import org.tessellation.sdk.infrastructure.snapshot.{CurrencySnapshotAcceptanceManager, SnapshotConsensus}
+import org.tessellation.sdk.infrastructure.snapshot._
 import org.tessellation.security.SecurityProvider
+import org.tessellation.security.signature.SignedValidator
 
 import io.circe.Decoder
 import io.circe.disjunctionCodecs._
@@ -43,20 +45,29 @@ object CurrencySnapshotConsensus {
     session: Session[F],
     stateChannelSnapshotService: StateChannelSnapshotService[F],
     snapshotAcceptanceManager: CurrencySnapshotAcceptanceManager[F],
-    maybeDataApplication: Option[BaseDataApplicationL0Service[F]]
+    maybeDataApplication: Option[BaseDataApplicationL0Service[F]],
+    signedValidator: SignedValidator[F]
   ): F[
     SnapshotConsensus[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent]
   ] = {
+
     def noopDecoder: Decoder[DataUpdate] = Decoder.failedWithMessage[DataUpdate]("not implemented")
 
     implicit def daDecoder: Decoder[DataUpdate] = maybeDataApplication.map(_.dataDecoder).getOrElse(noopDecoder)
 
+    val creator = CurrencySnapshotCreator.make[F](
+      snapshotAcceptanceManager,
+      rewards
+    )
+
+    val validator = CurrencySnapshotValidator.make[F](creator, signedValidator)
+
     Consensus.make[F, CurrencySnapshotEvent, SnapshotOrdinal, CurrencySnapshotArtifact, CurrencySnapshotContext](
       CurrencySnapshotConsensusFunctions.make[F](
         stateChannelSnapshotService,
-        snapshotAcceptanceManager,
         collateral,
-        rewards,
+        creator,
+        validator,
         maybeDataApplication
       ),
       gossip,
@@ -70,4 +81,5 @@ object CurrencySnapshotConsensus {
       session
     )
   }
+
 }
