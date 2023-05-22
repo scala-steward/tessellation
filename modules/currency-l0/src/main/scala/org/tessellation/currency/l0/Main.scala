@@ -50,7 +50,7 @@ object Main
       _ <- Resource.unit
       queues <- Queues.make[IO](sdkQueues).asResource
       storages <- Storages.make[IO](sdkStorages, cfg.snapshot, method.globalL0Peer).asResource
-      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client)
+      p2pClient = P2PClient.make[IO](sdkP2PClient, sdkResources.client, sdkServices.session)
       validators = Validators.make[IO](seedlist)
       services <- Services
         .make[IO](

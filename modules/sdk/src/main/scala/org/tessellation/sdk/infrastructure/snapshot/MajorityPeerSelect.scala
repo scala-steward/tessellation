@@ -19,8 +19,7 @@ import org.tessellation.schema.peer.Peer
 import org.tessellation.schema.peer.Peer.toP2PContext
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
 import org.tessellation.sdk.domain.snapshot.PeerSelect
-import org.tessellation.sdk.domain.snapshot.PeerSelect._
-import org.tessellation.sdk.http.p2p.clients.L0GlobalSnapshotClient
+import org.tessellation.sdk.http.p2p.PeerResponse.PeerResponse
 import org.tessellation.security.hash.Hash
 
 import derevo.cats.show
@@ -50,10 +49,12 @@ object MajorityPeerSelect {
 
   def make[F[_]: Async: KryoSerializer: Random](
     storage: ClusterStorage[F],
-    snapshotClient: L0GlobalSnapshotClient[F]
+    fetchLatestOrdinal: => PeerResponse[F, SnapshotOrdinal],
+    fetchSnapshotHash: SnapshotOrdinal => PeerResponse[F, Option[Hash]]
   ): PeerSelect[F] = new PeerSelect[F] {
 
-    val logger = Slf4jLogger.getLoggerFromName[F](peerSelectLoggerName)
+    // val logger = Slf4jLogger.getLoggerFromName[F](peerSelectLoggerName)
+    val logger = Slf4jLogger.getLogger[F]
 
     def select: F[Peer] = getFilteredPeerDetails
       .flatTap(details => logger.debug(details.asJson.noSpaces))
@@ -67,7 +68,7 @@ object MajorityPeerSelect {
           MonadThrow[F].fromOption(peerSublist.toNel, NoPeersToSelect)
         }
       peerOrdinals <- peers.parTraverseN(maxConcurrentPeerInquiries) { peer =>
-        snapshotClient.getLatestOrdinal(peer).map((peer, _))
+        fetchLatestOrdinal(peer).map((peer, _))
       }
       latestOrdinals = peerOrdinals.map { case (_, ordinal) => ordinal }
       ordinalDistribution = peerOrdinals.groupMap { case (_, ordinal) => ordinal } { case (peer, _) => peer }
@@ -103,6 +104,6 @@ object MajorityPeerSelect {
     }
 
     def getSnapshotHashByPeer(peer: Peer, ordinal: SnapshotOrdinal): F[Option[(Peer, Hash)]] =
-      snapshotClient.getHash(ordinal).run(peer).map(_.map((peer, _)))
+      fetchSnapshotHash(ordinal).run(peer).map(_.map((peer, _)))
   }
 }

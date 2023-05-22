@@ -32,7 +32,8 @@ object Programs {
     globalSnapshotContextFns: GlobalSnapshotContextFunctions[F]
   ): Programs[F] = {
     val trustPush = TrustPush.make(storages.trust, services.gossip)
-    val peerSelect: PeerSelect[F] = MajorityPeerSelect.make(storages.cluster, p2pClient.globalSnapshot)
+    val peerSelect: PeerSelect[F] =
+      MajorityPeerSelect.make(storages.cluster, p2pClient.globalSnapshot.getLatestOrdinal, p2pClient.globalSnapshot.getHash)
     val download: Download[F] = Download
       .make[F](
         storages.snapshotDownload,
