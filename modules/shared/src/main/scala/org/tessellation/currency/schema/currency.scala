@@ -151,7 +151,7 @@ object currency {
   }
 
   object CurrencySnapshot {
-    def mkGenesis(balances: Map[Address, Balance], salt: Salt): CurrencySnapshot =
+    def mkGenesis(balances: Map[Address, Balance], salt: Salt, dataApplication: Option[Array[Byte]]): CurrencySnapshot =
       CurrencySnapshot(
         SnapshotOrdinal.MinValue,
         Height.MinValue,
@@ -161,7 +161,8 @@ object currency {
         SortedSet.empty,
         SnapshotTips(SortedSet.empty, mkActiveTips(8)),
         CurrencySnapshotInfo(SortedMap.empty, SortedMap.from(balances)),
-        salt
+        salt,
+        dataApplication
       )
 
     def mkFirstIncrementalSnapshot[F[_]: MonadThrow: KryoSerializer](genesis: Hashed[CurrencySnapshot]): F[CurrencyIncrementalSnapshot] =
@@ -174,7 +175,8 @@ object currency {
           SortedSet.empty,
           SortedSet.empty,
           genesis.tips,
-          stateProof
+          stateProof,
+          genesis.data
         )
       }
 
