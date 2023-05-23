@@ -10,11 +10,11 @@ import cats.syntax.show._
 
 import org.tessellation.currency.l0.node.IdentifierStorage
 import org.tessellation.currency.l0.snapshot.storages.LastBinaryHashStorage
-import org.tessellation.currency.l0.snapshot.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.currency.schema.currency._
 import org.tessellation.ext.crypto._
 import org.tessellation.json.JsonBinarySerializer
 import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.sdk.domain.cluster.storage.L0ClusterStorage
 import org.tessellation.sdk.domain.snapshot.storage.SnapshotStorage
 import org.tessellation.sdk.http.p2p.clients.StateChannelSnapshotClient

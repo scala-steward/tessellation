@@ -19,7 +19,7 @@ import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.address.Address
-import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext}
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.schema.peer.{L0Peer, PeerId}
 import org.tessellation.schema.salt.Salt
 import org.tessellation.sdk.domain.collateral.{Collateral, OwnCollateralNotSatisfied}

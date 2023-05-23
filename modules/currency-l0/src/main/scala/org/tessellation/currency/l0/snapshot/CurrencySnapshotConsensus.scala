@@ -11,7 +11,7 @@ import org.tessellation.currency.{BaseDataApplicationL0Service, DataUpdate}
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.balance.Amount
-import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.config.types.SnapshotConfig
 import org.tessellation.sdk.domain.cluster.services.Session
@@ -57,18 +57,17 @@ object CurrencySnapshotConsensus {
 
     val creator = CurrencySnapshotCreator.make[F](
       snapshotAcceptanceManager,
-      rewards
+      maybeDataApplication
     )
-
-    val validator = CurrencySnapshotValidator.make[F](creator, signedValidator)
+    val validator = CurrencySnapshotValidator.make[F](creator, Some(rewards), signedValidator)
 
     Consensus.make[F, CurrencySnapshotEvent, SnapshotOrdinal, CurrencySnapshotArtifact, CurrencySnapshotContext](
       CurrencySnapshotConsensusFunctions.make[F](
         stateChannelSnapshotService,
         collateral,
+        rewards,
         creator,
-        validator,
-        maybeDataApplication
+        validator
       ),
       gossip,
       selfId,

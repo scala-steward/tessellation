@@ -4,25 +4,27 @@ import cats.Applicative
 import cats.data.NonEmptyList
 import cats.effect.Async
 import cats.implicits.catsSyntaxEitherId
-import cats.syntax.applicativeError._
 import cats.syntax.applicative._
+import cats.syntax.applicativeError._
 import cats.syntax.bifunctor._
 import cats.syntax.contravariantSemigroupal._
 import cats.syntax.flatMap._
 import cats.syntax.foldable._
 import cats.syntax.functor._
-import cats.syntax.functorFilter._
-import cats.syntax.traverse._
 import cats.syntax.option._
 import cats.syntax.order._
+import cats.syntax.traverse._
 
 import scala.collection.immutable.SortedSet
+
+import org.tessellation.currency.dataApplication.DataApplicationBlock
 import org.tessellation.currency.schema.currency._
+import org.tessellation.currency.{BaseDataApplicationL0Service, DataState}
 import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema._
-import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
 import org.tessellation.schema.height.{Height, SubHeight}
 import org.tessellation.sdk.domain.block.processing.{BlockAcceptanceResult, deprecationThreshold, _}
 import org.tessellation.sdk.domain.rewards.Rewards
@@ -30,9 +32,8 @@ import org.tessellation.sdk.infrastructure.consensus.trigger.ConsensusTrigger
 import org.tessellation.security.SecurityProvider
 import org.tessellation.security.signature.Signed
 import org.tessellation.syntax.sortedCollection.sortedSetSyntax
+
 import eu.timepit.refined.auto._
-import org.tessellation.currency.{BaseDataApplicationL0Service, DataState}
-import org.tessellation.currency.dataApplication.DataApplicationBlock
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 case class CurrencySnapshotCreationResult(
@@ -48,7 +49,8 @@ trait CurrencySnapshotCreator[F[_]] {
     lastArtifact: Signed[CurrencySnapshotArtifact],
     lastContext: CurrencySnapshotContext,
     trigger: ConsensusTrigger,
-    events: Set[CurrencySnapshotEvent]
+    events: Set[CurrencySnapshotEvent],
+    rewards: Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot]
   ): F[CurrencySnapshotCreationResult]
 }
 
@@ -56,7 +58,6 @@ object CurrencySnapshotCreator {
 
   def make[F[_]: Async: SecurityProvider: KryoSerializer](
     currencySnapshotAcceptanceManager: CurrencySnapshotAcceptanceManager[F],
-    rewards: Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot],
     maybeDataApplicationService: Option[BaseDataApplicationL0Service[F]]
   ): CurrencySnapshotCreator[F] = new CurrencySnapshotCreator[F] {
     private val logger = Slf4jLogger.getLoggerFromClass(CurrencySnapshotCreator.getClass)
@@ -66,7 +67,8 @@ object CurrencySnapshotCreator {
       lastArtifact: Signed[CurrencySnapshotArtifact],
       lastContext: CurrencySnapshotContext,
       trigger: ConsensusTrigger,
-      events: Set[CurrencySnapshotEvent]
+      events: Set[CurrencySnapshotEvent],
+      rewards: Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot]
     ): F[CurrencySnapshotCreationResult] = {
 
       val (blocks: List[Signed[CurrencyBlock]], dataBlocks: List[Signed[DataApplicationBlock]]) = events.collect {
@@ -77,7 +79,7 @@ object CurrencySnapshotCreator {
       val blocksForAcceptance = blocks.toList
 
       for {
-        lastArtifactHash <- lastArtifact.value.hashF
+        lastArtifactHash <- lastArtifact.hashF
         currentOrdinal = lastArtifact.ordinal.next
         lastActiveTips <- lastArtifact.activeTips
         lastDeprecatedTips = lastArtifact.tips.deprecated

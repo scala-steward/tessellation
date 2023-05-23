@@ -11,10 +11,10 @@ import cats.syntax.show._
 import scala.util.control.NoStackTrace
 
 import org.tessellation.currency.l0.snapshot.storages.LastBinaryHashStorage
-import org.tessellation.currency.l0.snapshot.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.address.Address
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext}
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.domain.collateral.{Collateral, OwnCollateralNotSatisfied}
 import org.tessellation.sdk.domain.snapshot.services.GlobalL0Service

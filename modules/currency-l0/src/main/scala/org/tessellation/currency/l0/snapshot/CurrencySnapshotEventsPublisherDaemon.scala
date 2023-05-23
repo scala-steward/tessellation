@@ -4,7 +4,7 @@ import cats.effect.Async
 import cats.effect.std.{Queue, Supervisor}
 
 import org.tessellation.currency.{BaseDataApplicationL0Service, DataUpdate}
-import org.tessellation.schema.currency.CurrencySnapshotEvent
+import org.tessellation.schema.currency.consensus.CurrencySnapshotEvent
 import org.tessellation.sdk.domain.Daemon
 import org.tessellation.sdk.domain.gossip.Gossip
 import org.tessellation.sdk.infrastructure.snapshot.daemon.SnapshotEventsPublisherDaemon

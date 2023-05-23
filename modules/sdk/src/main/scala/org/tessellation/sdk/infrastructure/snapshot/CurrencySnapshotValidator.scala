@@ -4,79 +4,112 @@ import cats.data.ValidatedNec
 import cats.effect.kernel.Async
 import cats.syntax.all._
 
-import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencyIncrementalSnapshot}
+import scala.collection.immutable.{SortedMap, SortedSet}
+
+import org.tessellation.currency.dataApplication.DataApplicationBlock
+import org.tessellation.currency.schema.currency._
 import org.tessellation.ext.cats.syntax.validated.validatedSyntax
-import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext}
-import org.tessellation.sdk.infrastructure.consensus.trigger.ConsensusTrigger
+import org.tessellation.kryo.KryoSerializer
+import org.tessellation.schema.address.Address
+import org.tessellation.schema.balance.Balance
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
+import org.tessellation.schema.transaction.RewardTransaction
+import org.tessellation.sdk.domain.rewards.Rewards
+import org.tessellation.sdk.infrastructure.consensus.trigger.{ConsensusTrigger, EventTrigger, TimeTrigger}
 import org.tessellation.security.signature.SignedValidator.SignedValidationError
 import org.tessellation.security.signature.{Signed, SignedValidator}
 
 import derevo.cats.{eqv, show}
 import derevo.derive
+import eu.timepit.refined.auto._
 
 trait CurrencySnapshotValidator[F[_]] {
 
   type CurrencySnapshotValidationErrorOr[A] = ValidatedNec[CurrencySnapshotValidationError, A]
 
   def validateSignedSnapshot(
-    lastSignedArtifact: Signed[CurrencySnapshotArtifact],
+    lastArtifact: Signed[CurrencySnapshotArtifact],
     lastContext: CurrencySnapshotContext,
-    trigger: ConsensusTrigger,
-    artifact: CurrencySnapshotArtifact
+    artifact: Signed[CurrencySnapshotArtifact]
   ): F[CurrencySnapshotValidationErrorOr[(Signed[CurrencyIncrementalSnapshot], CurrencySnapshotContext)]]
+
+  def validateSnapshot(
+    lastArtifact: Signed[CurrencySnapshotArtifact],
+    lastContext: CurrencySnapshotContext,
+    artifact: CurrencySnapshotArtifact
+  ): F[CurrencySnapshotValidationErrorOr[(CurrencyIncrementalSnapshot, CurrencySnapshotContext)]]
 
 }
 
 object CurrencySnapshotValidator {
 
-  def make[F[_]: Async](
+  def make[F[_]: Async: KryoSerializer](
     currencySnapshotCreator: CurrencySnapshotCreator[F],
+    rewards: Option[Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot]],
     signedValidator: SignedValidator[F]
   ): CurrencySnapshotValidator[F] = new CurrencySnapshotValidator[F] {
 
     def validateSignedSnapshot(
-      lastSignedArtifact: Signed[CurrencySnapshotArtifact],
+      lastArtifact: Signed[CurrencySnapshotArtifact],
       lastContext: CurrencySnapshotContext,
-      trigger: ConsensusTrigger,
-      artifact: CurrencySnapshotArtifact
+      artifact: Signed[CurrencySnapshotArtifact]
     ): F[CurrencySnapshotValidationErrorOr[(Signed[CurrencyIncrementalSnapshot], CurrencySnapshotContext)]] =
-      validateSigned(lastSignedArtifact).flatMap { signedV =>
-        validateSnapshot(lastSignedArtifact, lastContext, trigger, artifact).map { snapshotV =>
+      validateSigned(artifact).flatMap { signedV =>
+        validateSnapshot(lastArtifact, lastContext, artifact).map { snapshotV =>
           signedV.product(snapshotV.map { case (_, info) => info })
         }
       }
 
-    private def validateSnapshot(
-      lastSignedArtifact: Signed[CurrencySnapshotArtifact],
+    def validateSnapshot(
+      lastArtifact: Signed[CurrencySnapshotArtifact],
       lastContext: CurrencySnapshotContext,
-      trigger: ConsensusTrigger,
       artifact: CurrencySnapshotArtifact
-    ): F[CurrencySnapshotValidationErrorOr[(CurrencyIncrementalSnapshot, CurrencySnapshotContext)]] = {
-      val events = artifact.blocks.unsorted.map(_.block)
-
-      currencySnapshotCreator.createProposalArtifact(lastSignedArtifact.ordinal, lastSignedArtifact, lastContext, trigger, events).map {
-        creationResult =>
-          validateContent(creationResult.artifact, artifact)
-            .productL(validateNotAcceptedBlocks(creationResult))
-            .map(snapshot => (snapshot, creationResult.context))
+    ): F[CurrencySnapshotValidationErrorOr[(CurrencyIncrementalSnapshot, CurrencySnapshotContext)]] = for {
+      contentV <- validateRecreateContent(lastArtifact, lastContext, artifact)
+      blocksV <- contentV.map(validateNotAcceptedBlocks).pure[F]
+    } yield
+      (contentV, blocksV).mapN {
+        case (creationResult, _) => (creationResult.artifact, creationResult.context)
       }
-    }
 
-    private def validateSigned(
+    def validateSigned(
       signedSnapshot: Signed[CurrencyIncrementalSnapshot]
     ): F[CurrencySnapshotValidationErrorOr[Signed[CurrencyIncrementalSnapshot]]] =
       signedValidator.validateSignatures(signedSnapshot).map(_.errorMap(InvalidSigned))
 
-    private def validateContent(
-      actual: CurrencyIncrementalSnapshot,
-      expected: CurrencyIncrementalSnapshot
-    ): CurrencySnapshotValidationErrorOr[CurrencyIncrementalSnapshot] =
-      if (actual =!= expected)
-        SnapshotDifferentThanExpected(actual, expected).invalidNec
-      else
-        actual.validNec
+    def validateRecreateContent(
+      lastArtifact: Signed[CurrencySnapshotArtifact],
+      lastContext: CurrencySnapshotContext,
+      expected: CurrencySnapshotArtifact
+    ): F[CurrencySnapshotValidationErrorOr[CurrencySnapshotCreationResult]] = {
+      val events: Set[CurrencySnapshotEvent] = expected.blocks.unsorted.map(_.block.asLeft[Signed[DataApplicationBlock]])
 
-    private def validateNotAcceptedBlocks(
+      val distributeRewards =
+        rewards.getOrElse(new Rewards[F, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot] {
+          override def distribute(
+            lastArtifact: Signed[CurrencySnapshotArtifact],
+            lastBalances: SortedMap[Address, Balance],
+            acceptedTransactions: SortedSet[Signed[CurrencyTransaction]],
+            trigger: ConsensusTrigger
+          ): F[SortedSet[RewardTransaction]] = expected.rewards.pure[F] // Assume rewards are ok if implementation not provided
+        })
+
+      val recreateFn = (trigger: ConsensusTrigger) =>
+        currencySnapshotCreator
+          .createProposalArtifact(lastArtifact.ordinal, lastArtifact, lastContext, trigger, events, distributeRewards)
+          .map { creationResult =>
+            if (creationResult.artifact =!= expected)
+              SnapshotDifferentThanExpected(expected, creationResult.artifact).invalidNec
+            else
+              creationResult.validNec
+          }
+
+      recreateFn(TimeTrigger).flatMap { tV =>
+        recreateFn(EventTrigger).map(_.orElse(tV))
+      }
+    }
+
+    def validateNotAcceptedBlocks(
       creationResult: CurrencySnapshotCreationResult
     ): CurrencySnapshotValidationErrorOr[Unit] =
       if (creationResult.awaitingBlocks.nonEmpty || creationResult.rejectedBlocks.nonEmpty)

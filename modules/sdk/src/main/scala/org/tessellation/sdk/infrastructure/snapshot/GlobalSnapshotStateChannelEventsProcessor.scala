@@ -72,7 +72,7 @@ object GlobalSnapshotStateChannelEventsProcessor {
 
       private def applyCurrencySnapshot(
         lastState: CurrencySnapshotInfo,
-        lastSnapshot: CurrencyIncrementalSnapshot,
+        lastSnapshot: Signed[CurrencyIncrementalSnapshot],
         snapshot: Signed[CurrencyIncrementalSnapshot]
       ): F[CurrencySnapshotInfo] = currencySnapshotContextFns.createContext(lastState, lastSnapshot, snapshot)
 

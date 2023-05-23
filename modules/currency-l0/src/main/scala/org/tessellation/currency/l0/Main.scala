@@ -57,6 +57,7 @@ object Main
           p2pClient,
           sdkServices,
           storages,
+          validators,
           sdkResources.client,
           sdkServices.session,
           sdk.seedlist,

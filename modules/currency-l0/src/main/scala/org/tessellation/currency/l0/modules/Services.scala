@@ -1,11 +1,13 @@
 package org.tessellation.currency.l0.modules
 
+import java.security.KeyPair
+
 import cats.effect.kernel.Async
 import cats.effect.std.{Random, Supervisor}
 import cats.syntax.applicative._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
-import org.http4s.client.Client
+
 import org.tessellation.currency.BaseDataApplicationL0Service
 import org.tessellation.currency.l0.config.types.AppConfig
 import org.tessellation.currency.l0.http.P2PClient
@@ -13,7 +15,7 @@ import org.tessellation.currency.l0.snapshot.CurrencySnapshotConsensus
 import org.tessellation.currency.l0.snapshot.services.{Rewards, StateChannelSnapshotService}
 import org.tessellation.currency.schema.currency._
 import org.tessellation.kryo.KryoSerializer
-import org.tessellation.schema.currency.CurrencySnapshotEvent
+import org.tessellation.schema.currency.consensus.CurrencySnapshotEvent
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.domain.cluster.services.{Cluster, Session}
 import org.tessellation.sdk.domain.collateral.Collateral
@@ -27,7 +29,7 @@ import org.tessellation.sdk.infrastructure.snapshot.{CurrencySnapshotContextFunc
 import org.tessellation.sdk.modules.SdkServices
 import org.tessellation.security.SecurityProvider
 
-import java.security.KeyPair
+import org.http4s.client.Client
 
 object Services {
 
@@ -74,7 +76,7 @@ object Services {
           stateChannelSnapshotService,
           sdkServices.currencySnapshotAcceptanceManager,
           maybeDataApplication,
-          validators.signedValidator,
+          validators.signedValidator
         )
       addressService = AddressService.make[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo](storages.snapshot)
       collateralService = Collateral.make[F](cfg.collateral, storages.snapshot)

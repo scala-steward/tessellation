@@ -20,7 +20,7 @@ import org.tessellation.currency.schema.currency._
 import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema._
-import org.tessellation.schema.currency.CurrencySnapshotContext
+import org.tessellation.schema.currency.consensus.CurrencySnapshotContext
 import org.tessellation.schema.node.NodeState
 import org.tessellation.schema.peer.Peer
 import org.tessellation.sdk.domain.cluster.storage.ClusterStorage
@@ -101,7 +101,7 @@ object Download {
 
         fetchSnapshot(none, lastSnapshot.ordinal.next).flatMap { snapshot =>
           currencySnapshotContextFns
-            .createContext(lastContext, lastSnapshot.value, snapshot)
+            .createContext(lastContext, lastSnapshot, snapshot)
             .handleErrorWith(_ => InvalidChain.raiseError[F, CurrencySnapshotContext])
             .map((snapshot, _))
         }

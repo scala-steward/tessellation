@@ -1,7 +1,7 @@
 package org.tessellation.sdk.infrastructure
 
 import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencyTransaction}
-import org.tessellation.schema.currency.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
+import org.tessellation.schema.currency.consensus.{CurrencySnapshotArtifact, CurrencySnapshotContext, CurrencySnapshotEvent}
 import org.tessellation.schema.snapshot.Snapshot
 import org.tessellation.schema.transaction.Transaction
 import org.tessellation.schema.{Block, SnapshotOrdinal}

@@ -9,10 +9,10 @@ import cats.syntax.functor._
 
 import org.tessellation.currency.dataApplication.DataApplicationBlock
 import org.tessellation.currency.l0.cell.AlgebraCommand.NoAction
-import org.tessellation.currency.l0.snapshot.CurrencySnapshotEvent
 import org.tessellation.currency.schema.currency.CurrencyBlock
 import org.tessellation.kernel.Cell.NullTerminal
 import org.tessellation.kernel._
+import org.tessellation.schema.currency.consensus.CurrencySnapshotEvent
 import org.tessellation.security.signature.Signed
 
 import higherkindness.droste.{AlgebraM, CoalgebraM, scheme}
