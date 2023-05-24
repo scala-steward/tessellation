@@ -163,7 +163,8 @@ object CurrencySnapshotCreator {
             deprecated = deprecated,
             remainedActive = remainedActive
           ),
-          stateProof
+          stateProof,
+          maybeNewDataState
         )
         context = CurrencySnapshotInfo(
           lastTxRefs = lastContext.lastTxRefs ++ acceptanceResult.contextUpdate.lastTxRefs,

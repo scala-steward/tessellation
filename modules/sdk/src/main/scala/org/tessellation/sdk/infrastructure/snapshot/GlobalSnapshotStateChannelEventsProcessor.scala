@@ -3,11 +3,13 @@ package org.tessellation.sdk.infrastructure.snapshot
 import cats.data.NonEmptyList
 import cats.effect.Async
 import cats.syntax.applicative._
+import cats.syntax.applicativeError._
 import cats.syntax.either._
 import cats.syntax.flatMap._
 import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.syntax.option._
+import cats.syntax.show._
 import cats.syntax.traverse._
 
 import scala.collection.immutable.SortedMap
@@ -87,7 +89,6 @@ object GlobalSnapshotStateChannelEventsProcessor {
               type Agg =
                 (Option[(Option[Signed[CurrencyIncrementalSnapshot]], CurrencySnapshotInfo)], List[Signed[StateChannelSnapshotBinary]])
               type Result = Option[Success]
-
               (lastGlobalSnapshotInfo.lastCurrencySnapshots.get(address), binaries.toList.reverse)
                 .tailRecM[F, Result] {
                   case (state, Nil) => state.asRight[Agg].pure[F]
@@ -108,7 +109,13 @@ object GlobalSnapshotStateChannelEventsProcessor {
                       .toOption
                       .map { snapshot =>
                         maybeLastSnapshot
-                          .map(applyCurrencySnapshot(lastState, _, snapshot))
+                          .map(
+                            applyCurrencySnapshot(lastState, _, snapshot).handleErrorWith(e =>
+                              logger.warn(e)(
+                                s"Currency snapshot of ordinal ${snapshot.value.ordinal.show} for address ${address.show} couldn't be applied"
+                              ) >> lastState.pure[F]
+                            )
+                          )
                           .getOrElse(lastState.pure[F])
                           .map { state =>
                             ((snapshot.some, state).some, tail).asLeft[Result]
@@ -119,7 +126,6 @@ object GlobalSnapshotStateChannelEventsProcessor {
                 .map {
                   _.map(updated => agg + (address -> updated)).getOrElse(agg)
                 }
-
           }
 
       private def processStateChannelEvents(

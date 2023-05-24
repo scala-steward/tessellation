@@ -5,14 +5,13 @@ import java.security.KeyPair
 import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect._
 import cats.effect.std.Random
-import cats.syntax.applicative._
 import cats.syntax.contravariantSemigroupal._
 import cats.syntax.either._
 import cats.syntax.option._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 
-import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencyIncrementalSnapshot, CurrencyTransaction}
+import org.tessellation.currency.schema.currency.{CurrencyBlock, CurrencyTransaction}
 import org.tessellation.dag.l1.Main
 import org.tessellation.dag.l1.domain.address.storage.AddressStorage
 import org.tessellation.dag.l1.domain.block.BlockStorage
@@ -33,7 +32,6 @@ import org.tessellation.schema.height.{Height, SubHeight}
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.schema.transaction._
 import org.tessellation.sdk.infrastructure.block.processing.BlockAcceptanceManager
-import org.tessellation.sdk.infrastructure.consensus.trigger.ConsensusTrigger
 import org.tessellation.sdk.infrastructure.snapshot._
 import org.tessellation.sdk.infrastructure.snapshot.storage.LastSnapshotStorage
 import org.tessellation.sdk.modules.SdkValidators
@@ -96,19 +94,11 @@ object SnapshotProcessorSuite extends SimpleIOSuite with TransactionGenerator {
 
             currencySnapshotValidator = CurrencySnapshotValidator.make[IO](
               creator,
-              Some {
-                (
-                  _: Signed[CurrencyIncrementalSnapshot],
-                  _: SortedMap[Address, Balance],
-                  _: SortedSet[Signed[CurrencyTransaction]],
-                  _: ConsensusTrigger
-                ) =>
-                  SortedSet.empty[RewardTransaction].pure[IO]
-              },
+              None,
               validators.signedValidator
             )
 
-            currencySnapshotContextFns = CurrencySnapshotContextFunctions.make(currencySnapshotValidator, currencySnapshotAcceptanceManager)
+            currencySnapshotContextFns = CurrencySnapshotContextFunctions.make(currencySnapshotValidator)
             globalSnapshotStateChannelManager <- GlobalSnapshotStateChannelAcceptanceManager.make[IO](Some(10L), None).asResource
             globalSnapshotAcceptanceManager = GlobalSnapshotAcceptanceManager.make(
               BlockAcceptanceManager.make[IO, DAGTransaction, DAGBlock](validators.blockValidator),

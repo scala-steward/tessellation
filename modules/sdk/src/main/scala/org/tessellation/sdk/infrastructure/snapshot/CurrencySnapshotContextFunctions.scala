@@ -24,8 +24,7 @@ abstract class CurrencySnapshotContextFunctions[F[_]] extends SnapshotContextFun
 
 object CurrencySnapshotContextFunctions {
   def make[F[_]: Async: KryoSerializer: SecurityProvider](
-    validator: CurrencySnapshotValidator[F],
-    snapshotAcceptanceManager: CurrencySnapshotAcceptanceManager[F]
+    validator: CurrencySnapshotValidator[F]
   ) =
     new CurrencySnapshotContextFunctions[F] {
       def createContext(

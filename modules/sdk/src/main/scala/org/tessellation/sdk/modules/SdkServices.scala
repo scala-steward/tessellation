@@ -80,8 +80,7 @@ object SdkServices {
         validators.signedValidator
       )
       currencySnapshotContextFns = CurrencySnapshotContextFunctions.make(
-        currencySnapshotValidator,
-        currencySnapshotAcceptanceManager
+        currencySnapshotValidator
       )
 
       globalSnapshotStateChannelManager <- GlobalSnapshotStateChannelAcceptanceManager.make(None, stateChannelAllowanceLists)
