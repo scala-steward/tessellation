@@ -74,6 +74,8 @@ object method {
 
     val l0SeedlistPath = seedlistPath
 
+    val prioritySeedlistPath = None
+
     val stateAfterJoining: NodeState = NodeState.WaitingForDownload
 
     val lastFullGlobalSnapshotOrdinal: SnapshotOrdinal

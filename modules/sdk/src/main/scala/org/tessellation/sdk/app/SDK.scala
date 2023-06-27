@@ -28,6 +28,7 @@ trait SDK[F[_]] {
   lazy val nodeId: PeerId = PeerId.fromPublic(keyPair.getPublic)
   val generation: Generation
   val seedlist: Option[Set[SeedlistEntry]]
+  val prioritySeedlist: Option[Set[SeedlistEntry]]
   val trustRatings: Option[PeerObservationAdjustmentUpdateBatch]
 
   val sdkResources: SdkResources[F]

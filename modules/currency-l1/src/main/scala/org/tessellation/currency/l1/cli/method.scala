@@ -67,6 +67,7 @@ object method {
 
     val l0SeedlistPath = None
 
+    val prioritySeedlistPath = None
   }
 
   case class RunInitialValidator(

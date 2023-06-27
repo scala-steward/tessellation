@@ -29,6 +29,8 @@ trait CliMethod {
 
   val l0SeedlistPath: Option[SeedListPath]
 
+  val prioritySeedlistPath: Option[SeedListPath]
+
   val stateChannelAllowanceLists: Option[Map[Address, NonEmptySet[PeerId]]]
 
   val trustRatingsPath: Option[Path]

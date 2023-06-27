@@ -2,8 +2,8 @@ package org.tessellation.currency.l1.domain.snapshot.programs
 
 import cats.Applicative
 import cats.data.{NonEmptyList, Validated, ValidatedNel}
-import cats.effect.Async
 import cats.effect.std.Random
+import cats.effect.{Async, Ref}
 import cats.syntax.all._
 
 import org.tessellation.currency.schema.currency._
@@ -47,9 +47,12 @@ object CurrencySnapshotProcessor {
     lastCurrencySnapshotStorage: LastSnapshotStorage[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo],
     transactionStorage: TransactionStorage[F, CurrencyTransaction],
     globalSnapshotContextFns: SnapshotContextFunctions[F, GlobalIncrementalSnapshot, GlobalSnapshotInfo],
-    currencySnapshotContextFns: SnapshotContextFunctions[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo]
+    currencySnapshotContextFns: SnapshotContextFunctions[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo],
+    isAlignedR: Ref[F, Boolean]
   ): CurrencySnapshotProcessor[F] =
     new CurrencySnapshotProcessor[F] {
+      override def isAlignedWithGlobalL0: F[Boolean] = isAlignedR.get
+
       def process(
         snapshot: Either[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo), Hashed[GlobalIncrementalSnapshot]]
       ): F[SnapshotProcessingResult] =

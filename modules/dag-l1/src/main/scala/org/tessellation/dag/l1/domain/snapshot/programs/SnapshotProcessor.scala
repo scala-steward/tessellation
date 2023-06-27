@@ -55,6 +55,8 @@ abstract class SnapshotProcessor[
 
   def applySnapshotFn(lastState: SI, lastSnapshot: S, snapshot: Signed[S]): F[SI]
 
+  def isAlignedWithGlobalL0: F[Boolean] = Applicative[F].pure(true)
+
   def processAlignment(
     alignment: Alignment,
     blockStorage: BlockStorage[F, B],
@@ -254,7 +256,7 @@ abstract class SnapshotProcessor[
                       )
                     )
                 }
-              case _ => (new Throwable("unexpected state: latest snapshot found")).raiseError[F, Alignment]
+              case _ => new Throwable("unexpected state: latest snapshot found").raiseError[F, Alignment]
             }
           case Right(snapshot) =>
             val SnapshotTips(snapshotDeprecatedTips, snapshotRemainedActive) = snapshot.tips
@@ -281,21 +283,19 @@ abstract class SnapshotProcessor[
 
                           if (!areTipsAligned)
                             MonadThrow[F].raiseError[Alignment](TipsGotMisaligned(deprecatedTipsToAdd, tipsToDeprecate))
-                          else if (onlyInMajority.isEmpty)
-                            Applicative[F].pure[Alignment](
-                              AlignedAtNewOrdinal(
-                                snapshot,
-                                state,
-                                toMarkMajority.toSet,
-                                tipsToDeprecate,
-                                tipsToRemove,
-                                txRefsToMarkMajority,
-                                postponedToWaiting
-                              )
-                            )
                           else
-                            Applicative[F]
-                              .pure[Alignment](
+                            isAlignedWithGlobalL0.map { aligned =>
+                              if (onlyInMajority.isEmpty && aligned)
+                                AlignedAtNewOrdinal(
+                                  snapshot,
+                                  state,
+                                  toMarkMajority.toSet,
+                                  tipsToDeprecate,
+                                  tipsToRemove,
+                                  txRefsToMarkMajority,
+                                  postponedToWaiting
+                                )
+                              else
                                 RedownloadNeeded(
                                   snapshot,
                                   state,
@@ -308,7 +308,7 @@ abstract class SnapshotProcessor[
                                   tipsToRemove,
                                   postponedToWaiting
                                 )
-                              )
+                            }
                       }
                     }
 
@@ -343,34 +343,33 @@ abstract class SnapshotProcessor[
 
                           if (!areTipsAligned)
                             MonadThrow[F].raiseError[Alignment](TipsGotMisaligned(deprecatedTipsToAdd, tipsToDeprecate))
-                          else if (onlyInMajority.isEmpty && acceptedToRemove.isEmpty)
-                            Applicative[F].pure[Alignment](
-                              AlignedAtNewHeight(
-                                snapshot,
-                                state,
-                                toMarkMajority.toSet,
-                                obsoleteToRemove,
-                                tipsToDeprecate,
-                                tipsToRemove,
-                                txRefsToMarkMajority,
-                                postponedToWaiting
-                              )
-                            )
                           else
-                            Applicative[F].pure[Alignment](
-                              RedownloadNeeded(
-                                snapshot,
-                                state,
-                                toAdd,
-                                toMarkMajority.toSet,
-                                acceptedToRemove,
-                                obsoleteToRemove,
-                                toReset,
-                                tipsToDeprecate,
-                                tipsToRemove,
-                                postponedToWaiting
-                              )
-                            )
+                            isAlignedWithGlobalL0.map { aligned =>
+                              if (onlyInMajority.isEmpty && acceptedToRemove.isEmpty && aligned)
+                                AlignedAtNewHeight(
+                                  snapshot,
+                                  state,
+                                  toMarkMajority.toSet,
+                                  obsoleteToRemove,
+                                  tipsToDeprecate,
+                                  tipsToRemove,
+                                  txRefsToMarkMajority,
+                                  postponedToWaiting
+                                )
+                              else
+                                RedownloadNeeded(
+                                  snapshot,
+                                  state,
+                                  toAdd,
+                                  toMarkMajority.toSet,
+                                  acceptedToRemove,
+                                  obsoleteToRemove,
+                                  toReset,
+                                  tipsToDeprecate,
+                                  tipsToRemove,
+                                  postponedToWaiting
+                                )
+                            }
                       }
                     }
 
@@ -387,7 +386,7 @@ abstract class SnapshotProcessor[
                       )
                     )
                 }
-              case None => (new Throwable("unexpected state: latest snapshot not found")).raiseError[F, Alignment]
+              case None => new Throwable("unexpected state: latest snapshot not found").raiseError[F, Alignment]
 
             }
         }

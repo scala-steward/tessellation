@@ -1,10 +1,12 @@
 package org.tessellation.currency.l1
 
 import cats.Applicative
-import cats.effect.IO
-import cats.effect.kernel.Resource
+import cats.effect.{IO, Ref, Resource}
+import cats.syntax.foldable._
 import cats.syntax.semigroupk._
+import cats.syntax.set._
 
+import scala.collection.immutable.SortedSet
 import scala.concurrent.duration._
 
 import org.tessellation.BuildInfo
@@ -25,6 +27,7 @@ import org.tessellation.schema.node.NodeState.SessionStarted
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.sdk.app.{SDK, TessellationIOApp}
 import org.tessellation.sdk.infrastructure.gossip.{GossipDaemon, RumorHandlers}
+import org.tessellation.sdk.infrastructure.redownload.AlignmentCheck
 import org.tessellation.sdk.resources.MkHttpServer
 import org.tessellation.sdk.resources.MkHttpServer.ServerName
 import org.tessellation.sdk.{SdkOrSharedOrKernelRegistrationIdRange, sdkKryoRegistrar}
@@ -86,6 +89,10 @@ abstract class CurrencyL1App(
           p2pClient,
           cfg
         )
+
+      // TODO is this the correct starting value?
+      isAlignedR <- Ref.of[IO, Boolean](true).asResource
+
       snapshotProcessor = CurrencySnapshotProcessor.make(
         method.identifier,
         storages.address,
@@ -94,7 +101,8 @@ abstract class CurrencyL1App(
         storages.lastSnapshot,
         storages.transaction,
         sdkServices.globalSnapshotContextFns,
-        sdkServices.currencySnapshotContextFns
+        sdkServices.currencySnapshotContextFns,
+        isAlignedR
       )
       programs = Programs
         .make[IO, CurrencyTransaction, CurrencyBlock, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotInfo](
@@ -121,6 +129,21 @@ abstract class CurrencyL1App(
 
       _ <- Daemons
         .start(storages, services, healthChecks)
+        .asResource
+
+      _ <- sdk.prioritySeedlist
+        .flatMap(s => SortedSet.from(s).toNes)
+        .traverse_ { priorityPeers =>
+          val alignmentCheck = AlignmentCheck.make(
+            priorityPeers,
+            isAlignedR,
+            storages.cluster,
+            storages.globalL0Cluster,
+            storages.lastGlobalSnapshot,
+            p2pClient.l0GlobalSnapshot
+          )
+          AlignmentCheck.daemon[IO](alignmentCheck).start
+        }
         .asResource
 
       api = HttpApi
