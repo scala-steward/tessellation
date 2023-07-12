@@ -195,7 +195,7 @@ object CurrencySnapshotProcessor {
           lastCurrencySnapshotStorage.getCombined.flatMap(LastSnapshotStorage.make[F, CurrencyIncrementalSnapshot, CurrencySnapshotInfo](_))
         val as = addressStorage.getState.flatMap(AddressStorage.make(_))
         val ts =
-          transactionStorage.getState().flatMap { case (lastTxs, waitingTxs) => TransactionStorage.make(lastTxs, waitingTxs) }
+          transactionStorage.getState().flatMap { case (lastTxs, waitingTxs) => TransactionStorage.make(lastTxs, waitingTxs, None) }
 
         (as, bs, lcss, ts).mapN((_, _, _, _))
       }

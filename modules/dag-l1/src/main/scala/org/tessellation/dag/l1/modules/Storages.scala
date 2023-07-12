@@ -39,7 +39,7 @@ object Storages {
       consensusStorage <- ConsensusStorage.make[F, T, B]
       l0ClusterStorage <- L0ClusterStorage.make[F](l0Peer)
       lastSnapshotStorage <- LastSnapshotStorage.make[F, S, SI]
-      transactionStorage <- TransactionStorage.make[F, T]
+      transactionStorage <- TransactionStorage.make[F, T](None)
       addressStorage <- AddressStorage.make[F]
     } yield
       new Storages[F, T, B, P, S, SI] {

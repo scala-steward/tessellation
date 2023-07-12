@@ -22,6 +22,7 @@ import scala.util.control.NoStackTrace
 
 import org.tessellation.dag.l1.domain.transaction.TransactionStorage._
 import org.tessellation.ext.collection.MapRefUtils._
+import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.transaction._
@@ -35,7 +36,8 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 class TransactionStorage[F[_]: Async, T <: Transaction: Order: Ordering](
   lastAccepted: MapRef[F, Address, Option[LastTransactionReferenceState]],
-  waitingTransactions: MapRef[F, Address, Option[NonEmptySet[Hashed[T]]]]
+  waitingTransactions: MapRef[F, Address, Option[NonEmptySet[Hashed[T]]]],
+  currencyIdentifier: Option[Hash]
 ) {
 
   private val logger = Slf4jLogger.getLogger[F]
@@ -45,7 +47,9 @@ class TransactionStorage[F[_]: Async, T <: Transaction: Order: Ordering](
     (lastAccepted.toMap, waitingTransactions.toMap).mapN((_, _))
 
   def getLastAcceptedReference(source: Address): F[TransactionReference] =
-    lastAccepted(source).get.map(_.map(_.ref).getOrElse(TransactionReference.empty))
+    lastAccepted(source).get.map {
+      _.map(_.ref).getOrElse(currencyIdentifier.map(TransactionReference.emptyCurrency).getOrElse(TransactionReference.empty))
+    }
 
   def setLastAccepted(lastTxRefs: Map[Address, TransactionReference]): F[Unit] =
     lastAccepted.clear >>
@@ -217,20 +221,25 @@ class TransactionStorage[F[_]: Async, T <: Transaction: Order: Ordering](
 
 object TransactionStorage {
 
-  def make[F[_]: Async: KryoSerializer, T <: Transaction: Order: Ordering]: F[TransactionStorage[F, T]] =
+  def make[F[_]: Async: KryoSerializer, T <: Transaction: Order: Ordering](
+    currencyIdentifier: Option[Address]
+  ): F[TransactionStorage[F, T]] =
     for {
       lastAccepted <- MapRef.ofConcurrentHashMap[F, Address, LastTransactionReferenceState]()
       waitingTransactions <- MapRef.ofConcurrentHashMap[F, Address, NonEmptySet[Hashed[T]]]()
-    } yield new TransactionStorage[F, T](lastAccepted, waitingTransactions)
+      identifier <- currencyIdentifier.map(_.value.value).traverse(_.hashF)
+    } yield new TransactionStorage[F, T](lastAccepted, waitingTransactions, identifier)
 
   def make[F[_]: Async: KryoSerializer, A <: Transaction: Order: Ordering](
     lastAccepted: Map[Address, LastTransactionReferenceState],
-    waitingTransactions: Map[Address, NonEmptySet[Hashed[A]]]
+    waitingTransactions: Map[Address, NonEmptySet[Hashed[A]]],
+    currencyIdentifier: Option[Address]
   ): F[TransactionStorage[F, A]] =
     (
       MapRef.ofSingleImmutableMap(lastAccepted),
-      MapRef.ofSingleImmutableMap(waitingTransactions)
-    ).mapN(new TransactionStorage(_, _))
+      MapRef.ofSingleImmutableMap(waitingTransactions),
+      currencyIdentifier.map(_.value.value).traverse(_.hashF)
+    ).mapN(new TransactionStorage(_, _, _))
 
   sealed trait TransactionAcceptanceError extends NoStackTrace
   case class ParentNotAccepted(

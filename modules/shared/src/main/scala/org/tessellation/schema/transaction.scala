@@ -62,6 +62,8 @@ object transaction {
 
   object TransactionReference {
     val empty: TransactionReference = TransactionReference(TransactionOrdinal(0L), Hash.empty)
+    def emptyCurrency(currencyIdentifier: Hash): TransactionReference =
+      TransactionReference(TransactionOrdinal(0L), currencyIdentifier)
 
     val _Hash: Lens[TransactionReference, Hash] = GenLens[TransactionReference](_.hash)
     val _Ordinal: Lens[TransactionReference, TransactionOrdinal] = GenLens[TransactionReference](_.ordinal)
